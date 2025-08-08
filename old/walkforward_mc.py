@@ -1,5 +1,5 @@
 from permutations import get_permutation
-from basic_strats import donchian_breakout, optimize_donchian, optimize_moving_average, moving_average
+from strategies.basic_strats import donchian_breakout, optimize_donchian, optimize_moving_average, moving_average
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
