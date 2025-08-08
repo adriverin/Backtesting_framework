@@ -3,7 +3,7 @@
 A lightweight research toolkit to download OHLCV data, run in-sample Monte Carlo permutation tests, and perform out-of-sample walk-forward evaluations for modular trading strategies.
 
 ### Features
-- **Data caching** from Yahoo Finance into Parquet under `data/ohlcv_{ASSET}_{TF}.parquet`
+- **Data caching** from Binance into Parquet under `data/ohlcv_{ASSET}_{TF}.parquet`
 - **In-sample MC permutations** to assess overfitting risk
 - **Out-of-sample walk-forward** evaluation
 - **Walk-forward MC permutations** for robustness
@@ -13,13 +13,13 @@ A lightweight research toolkit to download OHLCV data, run in-sample Monte Carlo
 Requires Python 3.10+.
 
 ```bash
-pip install pandas numpy matplotlib yfinance pyarrow tqdm scikit-learn
+pip install pandas numpy matplotlib ccxt pyarrow tqdm scikit-learn
 # Optional (only for strategy "ml")
 pip install torch
 ```
 
 ### Prepare data
-Downloads OHLCV caches for multiple assets and timeframes into `data/`.
+Downloads OHLCV caches for multiple assets and timeframes from Binance (via ccxt) into `data/`.
 
 ```bash
 python data/download_data.py
@@ -80,6 +80,9 @@ python is_results.py \
 ### Notes
 - If you don’t install PyTorch, use `ma` or `ml_rsi_ema_volume` instead of `ml`.
 - Price columns supported include `close` (default) and for ML: `typical`, `median`, `vwap` (created on-the-fly when possible).
+- Symbols map to Binance spot pairs. Inputs like `BTCUSD`, `BTC-USD`, `BTC/USDT` are accepted; they are fetched as `BTC/USDT` and saved under `BTCUSD` in filenames.
+- No API key is required; public Binance kline endpoints are used via ccxt with rate limiting enabled.
+- If Binance is unavailable in your region, swap the exchange in `data/download_data.py` (ccxt supports many exchanges).
 
 ### Folder structure
 - `data/` — cached OHLCV, cache summaries, helpers

@@ -11,16 +11,31 @@ def _normalize_symbol_for_filename(symbol: str) -> str:
     return symbol.replace("/", "").replace("-", "")
 
 
-def _normalize_symbol_for_yahoo(symbol: str) -> str:
-    # Accepts BTCUSD, BTC-USD, BTC/USD → returns BTC-USD
-    if "-" in symbol:
-        return symbol
-    if "/" in symbol:
-        parts = symbol.split("/")
-        return f"{parts[0]}-{parts[1]}"
-    if symbol.endswith("USD") and len(symbol) > 3:
-        return f"{symbol[:-3]}-USD"
-    return symbol
+def _normalize_symbol_for_binance(symbol: str) -> str:
+    """Map user symbols to Binance spot symbols.
+
+    Accepts BTCUSD, BTC-USD, BTC/USD, BTCUSDT and returns 'BTC/USDT'.
+    Default quote is USDT for 'USD' inputs.
+    """
+    s = symbol.upper().replace(" ", "")
+    base: str
+    quote: str
+
+    if "/" in s:
+        base, quote = s.split("/")
+    elif "-" in s:
+        base, quote = s.split("-")
+    else:
+        if s.endswith("USDT"):
+            base, quote = s[:-4], "USDT"
+        elif s.endswith("USD"):
+            base, quote = s[:-3], "USDT"
+        else:
+            base, quote = s, "USDT"
+
+    if quote == "USD":
+        quote = "USDT"
+    return f"{base}/{quote}"
 
 
 def _interval_to_pandas_rule(interval: str) -> Tuple[str, pd.Timedelta]:
@@ -39,82 +54,85 @@ def _interval_to_pandas_rule(interval: str) -> Tuple[str, pd.Timedelta]:
     raise ValueError(f"Unsupported interval: {interval}")
 
 
-def _interval_to_yahoo(interval: str) -> Tuple[str, bool]:
-    # Returns (yf_interval, needs_resample_4h)
-    if interval in {"1m", "5m", "15m", "1h", "1d"}:
-        return interval, False
-    if interval == "4h":
-        return "1h", True
-    raise ValueError(f"Unsupported interval for Yahoo: {interval}")
+def _interval_to_ccxt(interval: str) -> str:
+    """Validate/convert interval to ccxt timeframe string."""
+    supported = {"1m", "5m", "15m", "1h", "4h", "1d"}
+    if interval not in supported:
+        raise ValueError(f"Unsupported interval for Binance via ccxt: {interval}")
+    return interval
 
 
-def _download_ohlcv(symbol_yahoo: str, start: str, end: str, interval: str) -> pd.DataFrame:
+def _download_ohlcv(symbol_binance: str, start: str, end: str, interval: str) -> pd.DataFrame:
+    """Download OHLCV from Binance via ccxt over a date range.
+
+    Returns a DataFrame with columns: open, high, low, close, volume and a UTC-naive DatetimeIndex.
+    """
     try:
-        import yfinance as yf
+        import ccxt  # type: ignore
     except Exception as exc:  # pragma: no cover
         raise ImportError(
-            "yfinance is required to download data. Install with `pip install yfinance`"
+            "ccxt is required to download data from Binance. Install with `pip install ccxt`"
         ) from exc
 
-    yf_interval, needs_resample_4h = _interval_to_yahoo(interval)
+    timeframe = _interval_to_ccxt(interval)
 
-    df = yf.download(
-        tickers=symbol_yahoo,
-        start=start,
-        end=end,
-        interval=yf_interval,
-        auto_adjust=False,
-        progress=False,
-        threads=True,
-    )
+    # Prepare time bounds in ms
+    start_dt = pd.to_datetime(start, utc=True)
+    end_dt = pd.to_datetime(end, utc=True)
+    start_ms = int(start_dt.timestamp() * 1000)
+    end_ms = int(end_dt.timestamp() * 1000)
 
-    if isinstance(df.columns, pd.MultiIndex):
-        # yfinance may return multiindex for multiple tickers; select first level
-        df = df.droplevel(0, axis=1)
+    exchange = ccxt.binance({"enableRateLimit": True})
+    all_rows: list[list[float]] = []
 
-    if df.empty:
-        return df
+    # Compute step based on interval to advance reliably
+    _, expected_delta = _interval_to_pandas_rule(interval)
+    step_ms = int(expected_delta.total_seconds() * 1000)
 
-    df = df.rename(
-        columns={
-            "Open": "open",
-            "High": "high",
-            "Low": "low",
-            "Close": "close",
-            "Adj Close": "adj_close",
-            "Volume": "volume",
-        }
-    )
+    since = start_ms
+    limit = 1000  # exchange max per call
 
-    # Ensure datetime index is tz-naive UTC
-    if df.index.tz is not None:
-        df.index = df.index.tz_convert("UTC").tz_localize(None)
-    else:
-        # Treat as UTC-naive already
-        df.index = pd.to_datetime(df.index)
+    while since < end_ms:
+        try:
+            ohlcv = exchange.fetch_ohlcv(symbol_binance, timeframe=timeframe, since=since, limit=limit)
+        except Exception as e:
+            # On transient errors, break to avoid infinite loops
+            print(f"⚠️  Fetch error for {symbol_binance} at {since}: {e}")
+            break
 
-    # Resample to 4h if needed
-    if needs_resample_4h:
-        df = (
-            df.resample("4H")
-            .agg({
-                "open": "first",
-                "high": "max",
-                "low": "min",
-                "close": "last",
-                "volume": "sum",
-            })
-            .dropna()
-        )
+        if not ohlcv:
+            break
 
-    # Drop adj_close if present
-    if "adj_close" in df.columns:
-        df = df.drop(columns=["adj_close"])  # Not used by the framework
+        all_rows.extend(ohlcv)
+
+        last_ts = ohlcv[-1][0]
+        if last_ts is None:
+            break
+        # Advance 'since' to the next bar to avoid duplicates
+        since = max(since + step_ms, last_ts + 1)
+
+        # Safety: if no forward progress, break
+        if len(ohlcv) < limit and last_ts + step_ms >= end_ms:
+            break
+
+    if not all_rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(all_rows, columns=["timestamp", "open", "high", "low", "close", "volume"])
+    # Convert timestamp to UTC-naive datetime index
+    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
+    df = df.set_index("timestamp").sort_index()
+    # Filter to requested window and drop duplicates
+    df = df[(df.index >= start_dt) & (df.index < end_dt)]
+    df = df[~df.index.duplicated(keep="last")]
+    # Make index tz-naive (UTC)
+    df.index = df.index.tz_convert("UTC").tz_localize(None)
 
     # Additional derived price columns used by ML strategies
-    df["typical"] = (df["high"] + df["low"] + df["close"]) / 3.0
-    df["median"] = (df["high"] + df["low"]) / 2.0
-    df["vwap"] = df["typical"]  # aligned with existing usage in this project
+    if not df.empty:
+        df["typical"] = (df["high"] + df["low"] + df["close"]) / 3.0
+        df["median"] = (df["high"] + df["low"]) / 2.0
+        df["vwap"] = df["typical"]  # aligned with existing usage in this project
 
     return df
 
@@ -133,7 +151,7 @@ def create_maximum_cache_for_assets(
     """
     import json
 
-    print(f"🗄️  Creating OHLCV cache files for {len(assets)} assets")
+    print(f"🗄️  Creating OHLCV cache files for {len(assets)} assets (Binance via ccxt)")
     print(f"📅 Requested range: {start} to {end} ({interval} interval)")
     print("=" * 70)
 
@@ -156,7 +174,7 @@ def create_maximum_cache_for_assets(
 
     for i, asset in enumerate(assets, 1):
         print(f"\n📦 Caching {asset} ({i}/{len(assets)})...")
-        symbol_yahoo = _normalize_symbol_for_yahoo(asset)
+        symbol_binance = _normalize_symbol_for_binance(asset)
         symbol_file = _normalize_symbol_for_filename(asset)
         cache_file = cache_dir / f"ohlcv_{symbol_file}_{interval}.parquet"
 
@@ -169,25 +187,19 @@ def create_maximum_cache_for_assets(
                 except Exception:
                     df_existing = None
 
-            yf_interval, needs_resample_4h = _interval_to_yahoo(interval)
-
             if df_existing is not None and not df_existing.empty:
                 last_idx: pd.Timestamp = pd.to_datetime(df_existing.index.max())
-                # Start from the last saved bar; for 4h we add a back-buffer to recompute the boundary bucket
-                buffer = pd.Timedelta(hours=8) if needs_resample_4h else pd.Timedelta(0)
+                # Start from the last saved bar (ccxt returns exact bar sizes)
+                buffer = pd.Timedelta(0)
                 effective_start_dt = max(pd.to_datetime(start), last_idx - buffer)
                 effective_start = effective_start_dt.strftime("%Y-%m-%d %H:%M:%S")
             else:
                 effective_start = start
 
-            df_new = _download_ohlcv(symbol_yahoo, start=effective_start, end=end, interval=interval)
+            df_new = _download_ohlcv(symbol_binance, start=effective_start, end=end, interval=interval)
 
             if df_existing is not None and not df_existing.empty and not df_new.empty:
-                if needs_resample_4h:
-                    cutoff = df_new.index.min()
-                    df_combined = pd.concat([df_existing[df_existing.index < cutoff], df_new])
-                else:
-                    df_combined = pd.concat([df_existing, df_new])
+                df_combined = pd.concat([df_existing, df_new])
                 df = (
                     df_combined[~df_combined.index.duplicated(keep="last")]
                     .sort_index()
