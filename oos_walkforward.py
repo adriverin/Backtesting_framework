@@ -44,6 +44,50 @@ def _annualisation_factor(timeframe: str) -> float:
 
     return units_per_year
 
+
+def _ensure_price_column_exists(df: pd.DataFrame, price_column: str) -> pd.DataFrame:
+    """Ensure the requested price column exists, creating common derived ones if needed.
+
+    Supports:
+    - 'median'   = (high + low) / 2
+    - 'typical'  = (high + low + close) / 3
+    - 'vwap'     = rolling VWAP over 20 bars (requires volume)
+    """
+    if price_column in df.columns:
+        return df
+
+    df = df.copy()
+    col = price_column
+
+    if col == "median":
+        if all(c in df.columns for c in ["high", "low"]):
+            df[col] = (df["high"] + df["low"]) / 2
+            print(f"--- Created '{col}' column on-the-fly. ---")
+            return df
+        raise KeyError("Cannot create 'median' column: missing 'high' or 'low'.")
+
+    if col == "typical":
+        if all(c in df.columns for c in ["high", "low", "close"]):
+            df[col] = (df["high"] + df["low"] + df["close"]) / 3
+            print(f"--- Created '{col}' column on-the-fly. ---")
+            return df
+        raise KeyError("Cannot create 'typical' column: missing 'high', 'low' or 'close'.")
+
+    if col == "vwap":
+        required = ["high", "low", "close", "volume"]
+        if all(c in df.columns for c in required):
+            vwap_window = 20
+            typical_price = (df["high"] + df["low"] + df["close"]) / 3
+            tpv = typical_price * df["volume"]
+            cumulative_tpv = tpv.rolling(window=vwap_window, min_periods=1).sum()
+            cumulative_volume = df["volume"].rolling(window=vwap_window, min_periods=1).sum()
+            df[col] = (cumulative_tpv / cumulative_volume).fillna(method="ffill")
+            print(f"--- Created rolling 'vwap' ({vwap_window}-bar) column on-the-fly. ---")
+            return df
+        raise KeyError("Cannot create 'vwap' column: missing one of 'high','low','close','volume'.")
+
+    raise KeyError(f"Price column '{price_column}' not found in DataFrame and cannot be derived.")
+
 # ---------------------------------------------------------------------- #
 # Main tester class                                                       #
 # ---------------------------------------------------------------------- #
@@ -135,6 +179,7 @@ class WalkForward:
             long_lookback_ctx = self.train_lookback  # conservative
             signal_calc_start = max(0, train_end - long_lookback_ctx)
             calc_df = ohlc.iloc[signal_calc_start:oos_end]
+            calc_df = _ensure_price_column_exists(calc_df, price_col)
             oos_signals_full = strategy.generate_signals(calc_df)
 
             # Extract only new OOS section signals
@@ -150,6 +195,7 @@ class WalkForward:
 
     def run(self, save_json_dir: str | None = None):
         real_df = self.get_df()
+        real_df = _ensure_price_column_exists(real_df, self.price_column)
         ann_factor = _annualisation_factor(self.timeframe)
         print("")
         print("="*100)
@@ -232,6 +278,9 @@ class WalkForward:
             dd_gross = equity_gross / equity_gross.cummax() - 1.0
             dd_net = equity_net / equity_net.cummax() - 1.0
 
+            equity_gross = (1.0 + real_df["strategy_simple_r"]).cumprod()
+            equity_net = (1.0 + real_df["strategy_simple_r_net"]).cumprod()
+
             report = {
                 "run_type": "oos_walkforward",
                 "params": {
@@ -261,12 +310,14 @@ class WalkForward:
                         "gross": {
                             "ret_log": real_df["strategy_r"].fillna(0).tolist(),
                             "cum_log": real_df["strategy_r"].cumsum().fillna(0).tolist(),
+                            "equity": equity_gross.fillna(1).clip(lower=0).tolist(),
                             "drawdown": dd_gross.fillna(0).tolist(),
                             "rolling_sharpe": rolling_sharpe_gross.fillna(method="bfill").fillna(0).tolist(),
                         },
                         "net": {
                             "ret_log": real_df["strategy_r_net"].fillna(0).tolist(),
                             "cum_log": real_df["strategy_r_net"].cumsum().fillna(0).tolist(),
+                            "equity": equity_net.fillna(1).clip(lower=0).tolist(),
                             "drawdown": dd_net.fillna(0).tolist(),
                             "rolling_sharpe": rolling_sharpe_net.fillna(method="bfill").fillna(0).tolist(),
                         },

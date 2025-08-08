@@ -44,6 +44,42 @@ def _profit_factor(returns: pd.Series) -> float:
     return positive_sum / negative_sum
 
 
+def _json_safe(obj):
+    """Recursively convert an object so it can be serialized to strict JSON.
+
+    - Replaces NaN/Infinity with None
+    - Converts numpy/pandas scalars and arrays to native Python types
+    - Leaves basic Python types intact
+    """
+    import numpy as _np  # local import to avoid polluting module namespace
+    import math as _math
+
+    if obj is None or isinstance(obj, (str, bool)):
+        return obj
+    if isinstance(obj, (int,)):
+        return int(obj)
+    if isinstance(obj, (float,)):
+        return obj if _math.isfinite(obj) else None
+    if isinstance(obj, (_np.floating,)):
+        val = float(obj)
+        return val if _math.isfinite(val) else None
+    if isinstance(obj, (_np.integer,)):
+        return int(obj)
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    # pandas Series / numpy arrays
+    if hasattr(obj, 'tolist'):
+        return [_json_safe(v) for v in obj.tolist()]
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    # Fallback: stringify unknown types
+    try:
+        json.dumps(obj)
+        return obj
+    except TypeError:
+        return str(obj)
+
+
 def _annualisation_factor(timeframe: str) -> float:
     """Return the sqrt annualisation factor for the given timeframe string."""
     tf = timeframe.lower().strip()
@@ -59,6 +95,51 @@ def _annualisation_factor(timeframe: str) -> float:
 
     periods_per_year = (365 * 24 * 60) / minutes_per_unit
     return math.sqrt(periods_per_year)
+
+
+def _ensure_price_column_exists(df: pd.DataFrame, price_column: str) -> pd.DataFrame:
+    """Ensure the requested price column exists, creating common derived ones if needed.
+
+    Supports:
+    - 'median'   = (high + low) / 2
+    - 'typical'  = (high + low + close) / 3
+    - 'vwap'     = rolling VWAP over 20 bars (if volume available)
+    """
+    if price_column in df.columns:
+        return df
+
+    df = df.copy()
+    col = price_column
+
+    if col == "median":
+        if all(c in df.columns for c in ["high", "low"]):
+            df[col] = (df["high"] + df["low"]) / 2
+            print(f"--- Created '{col}' column on-the-fly. ---")
+            return df
+        raise KeyError("Cannot create 'median' column: missing 'high' or 'low'.")
+
+    if col == "typical":
+        if all(c in df.columns for c in ["high", "low", "close"]):
+            df[col] = (df["high"] + df["low"] + df["close"]) / 3
+            print(f"--- Created '{col}' column on-the-fly. ---")
+            return df
+        raise KeyError("Cannot create 'typical' column: missing 'high', 'low' or 'close'.")
+
+    if col == "vwap":
+        required = ["high", "low", "close", "volume"]
+        if all(c in df.columns for c in required):
+            vwap_window = 20
+            typical_price = (df["high"] + df["low"] + df["close"]) / 3
+            tpv = typical_price * df["volume"]
+            cumulative_tpv = tpv.rolling(window=vwap_window, min_periods=1).sum()
+            cumulative_volume = df["volume"].rolling(window=vwap_window, min_periods=1).sum()
+            df[col] = (cumulative_tpv / cumulative_volume).fillna(method="ffill")
+            print(f"--- Created rolling 'vwap' ({vwap_window}-bar) column on-the-fly. ---")
+            return df
+        raise KeyError("Cannot create 'vwap' column: missing one of 'high','low','close','volume'.")
+
+    # If unrecognised derived column, leave as error to surface quickly
+    raise KeyError(f"Price column '{price_column}' not found in DataFrame and cannot be derived.")
 
 
 # ---------------------------------------------------------------------- #
@@ -97,6 +178,9 @@ def plot_cumulative_returns(
 
     if len(df) == 0:
         raise ValueError("No data in the selected date range.")
+
+    # Ensure the requested price column exists for downstream calculations
+    df = _ensure_price_column_exists(df, price_column)
 
     # ------------------------------------------------------------------ #
     # Run strategy                                                       #
@@ -245,6 +329,9 @@ def plot_cumulative_returns(
         dd_gross = equity_gross / equity_gross.cummax() - 1.0
         dd_net = equity_net / equity_net.cummax() - 1.0
 
+        # Equity series (start at 1, min at 0)
+        asset_equity = (1.0 + df["simple_r"]).cumprod()
+
         report = {
             "run_type": "in_sample",
             "params": {
@@ -278,6 +365,7 @@ def plot_cumulative_returns(
                     "ret_simple": df["simple_r"].fillna(0).tolist(),
                     "cum_log": asset_cum.fillna(0).tolist(),
                     "cum_simple": asset_cum_simple.fillna(0).tolist(),
+                    "equity": asset_equity.fillna(1).clip(lower=0).tolist(),
                     "price": df[price_column].fillna(0).tolist(),
                 },
                 "strategy": {
@@ -286,6 +374,7 @@ def plot_cumulative_returns(
                         "ret_simple": df["strategy_simple_r"].fillna(0).tolist(),
                         "cum_log": strat_cum_gross.fillna(0).tolist(),
                         "cum_simple": strat_cum_simple_gross.fillna(0).tolist(),
+                        "equity": equity_gross.fillna(1).clip(lower=0).tolist(),
                         "drawdown": dd_gross.fillna(0).tolist(),
                         "rolling_sharpe": rolling_sharpe_gross.fillna(method="bfill").fillna(0).tolist(),
                     },
@@ -294,6 +383,7 @@ def plot_cumulative_returns(
                         "ret_simple": df["strategy_simple_r_net"].fillna(0).tolist(),
                         "cum_log": strat_cum_net.fillna(0).tolist(),
                         "cum_simple": strat_cum_simple_net.fillna(0).tolist(),
+                        "equity": equity_net.fillna(1).clip(lower=0).tolist(),
                         "drawdown": dd_net.fillna(0).tolist(),
                         "rolling_sharpe": rolling_sharpe_net.fillna(method="bfill").fillna(0).tolist(),
                     },
@@ -301,8 +391,10 @@ def plot_cumulative_returns(
             },
         }
 
+        # Sanitize to strict JSON to avoid NaN/Infinity causing parse errors in the dashboard
+        safe_report = _json_safe(report)
         with open(os.path.join(save_json_dir, "is.json"), "w") as f:
-            json.dump(report, f)
+            json.dump(safe_report, f, allow_nan=False)
 
 
 # ---------------------------------------------------------------------- #
@@ -352,20 +444,25 @@ if __name__ == "__main__":
         "weight_decay": 0.001,
         "batch_size": 128,
         "random_seed": 42,
+        #
+        "sma_windows": (5, 10, 20, 30),
+        "volatility_windows": (5, 10, 20),
+        "momentum_windows": (7, 14, 21, 30),
+        "rsi_windows": (7, 14, 21),
     }
 
 
     plot_cumulative_returns(
-        start_date="2019-01-01",
-        end_date="2024-01-01",
+        start_date="2018-07-25",
+        end_date="2024-10-31",
         # strategy_name="ma",
         strategy_name="ml",
-        asset="BTCUSD",
+        asset="VETUSD",
         timeframe="1h",
         show_plot=True,
         strategy_kwargs=ml_params,
-        price_column="close",
+        price_column="median",
         fee_bps=10.0,
-        slippage_bps=2.0,
+        slippage_bps=10.0,
         save_json_dir="reports/example_run",
     )

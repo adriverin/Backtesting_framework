@@ -56,6 +56,50 @@ def _annualisation_factor(timeframe: str) -> float:
     periods_per_year = (365 * 24 * 60) / minutes_per_unit
     return math.sqrt(periods_per_year)
 
+
+def _ensure_price_column_exists(df: pd.DataFrame, price_column: str) -> pd.DataFrame:
+    """Ensure the requested price column exists, creating common derived ones if needed.
+
+    Supports:
+    - 'median'   = (high + low) / 2
+    - 'typical'  = (high + low + close) / 3
+    - 'vwap'     = rolling VWAP over 20 bars (requires volume)
+    """
+    if price_column in df.columns:
+        return df
+
+    df = df.copy()
+    col = price_column
+
+    if col == "median":
+        if all(c in df.columns for c in ["high", "low"]):
+            df[col] = (df["high"] + df["low"]) / 2
+            print(f"--- Created '{col}' column on-the-fly. ---")
+            return df
+        raise KeyError("Cannot create 'median' column: missing 'high' or 'low'.")
+
+    if col == "typical":
+        if all(c in df.columns for c in ["high", "low", "close"]):
+            df[col] = (df["high"] + df["low"] + df["close"]) / 3
+            print(f"--- Created '{col}' column on-the-fly. ---")
+            return df
+        raise KeyError("Cannot create 'typical' column: missing 'high', 'low' or 'close'.")
+
+    if col == "vwap":
+        required = ["high", "low", "close", "volume"]
+        if all(c in df.columns for c in required):
+            vwap_window = 20
+            typical_price = (df["high"] + df["low"] + df["close"]) / 3
+            tpv = typical_price * df["volume"]
+            cumulative_tpv = tpv.rolling(window=vwap_window, min_periods=1).sum()
+            cumulative_volume = df["volume"].rolling(window=vwap_window, min_periods=1).sum()
+            df[col] = (cumulative_tpv / cumulative_volume).fillna(method="ffill")
+            print(f"--- Created rolling 'vwap' ({vwap_window}-bar) column on-the-fly. ---")
+            return df
+        raise KeyError("Cannot create 'vwap' column: missing one of 'high','low','close','volume'.")
+
+    raise KeyError(f"Price column '{price_column}' not found in DataFrame and cannot be derived.")
+
 # ---------------------------------------------------------------------- #
 # Config / Runner class                                                  #
 # ---------------------------------------------------------------------- #
@@ -128,6 +172,7 @@ class InSampleMCTester:
     def run(self, save_json_dir: str | None = None):
         self.save_json_dir = save_json_dir
         train_df = self.get_df()
+        train_df = _ensure_price_column_exists(train_df, self.price_column)
         print("=" * 100)
         print(f"Optimising strategy '{self.strategy_name}' on in-sample data")
         print(f"from {self.start_date} to {self.end_date}")
@@ -169,6 +214,7 @@ class InSampleMCTester:
         print("Running Monte-Carlo permutations")
         for perm_i in tqdm(range(1, self.n_perm)):
             perm_df = self._get_perm_df()
+            perm_df = _ensure_price_column_exists(perm_df, self.price_column)
             # Fresh strategy instance per permutation to avoid data leakage
             strategy = aVAILABLE_STRATEGIES[self.strategy_name](price_column=self.price_column, **self.strategy_kwargs)
             _ = strategy.optimize(perm_df)
@@ -305,11 +351,11 @@ if __name__ == "__main__":
     # main()
 
     ml_params = {
-        # "interval": "1h",
+        "interval": "1h",
         "forecast_horizon_hours": 1,
         "n_epochs": 300,
         "hidden_sizes": (128, 64, 32, 16),
-        "signal_percentiles": (10, 90),
+        "signal_percentiles": (2, 98),
         "train_ratio": 0.8,
         "val_ratio": 0.2,
         "early_stopping_patience": 10,
@@ -317,18 +363,24 @@ if __name__ == "__main__":
         "weight_decay": 0.001,
         "batch_size": 128,
         "random_seed": 42,
+        #
+        "sma_windows": (5, 10, 20, 30),
+        "volatility_windows": (5, 10, 20),
+        "momentum_windows": (7, 14, 21, 30),
+        "rsi_windows": (7, 14, 21),
     }
 
     tester = InSampleMCTester(
-        start_date="2019-01-01",
-        end_date="2024-01-01",
+        start_date="2018-07-25",
+        end_date="2024-10-31",
         strategy_name="ml",
         asset="VETUSD",
         timeframe="1h",
-        n_perm=20,
+        n_perm=30,
         generate_plot=True,
         strategy_kwargs=ml_params,
-        fee_bps=2.0,
-        slippage_bps=1.0,
+        price_column="median",
+        fee_bps=10.0,
+        slippage_bps=10.0,
     )
     tester.run(save_json_dir="reports/example_run")

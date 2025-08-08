@@ -6,59 +6,94 @@
   <title>Trading Strategy Dashboard</title>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
   <style>
-    body { background: #111; color: #eee; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-    .tabs { display: flex; gap: 10px; margin: 10px 0; }
-    .tab { padding: 8px 12px; border: 1px solid #444; cursor: pointer; border-radius: 6px; }
-    .tab.active { background: #333; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    :root {
+      --bg: #0c0c0f;
+      --bg-elev: #121218ee;
+      --surface: #15151d;
+      --text: #e7e7ee;
+      --muted: #a5a7b1;
+      --border: #2a2a36;
+      --accent: #5b8cff;
+      --accent-2: #71e6b0;
+      --shadow: 0 8px 24px rgba(0,0,0,0.45);
+    }
+    * { box-sizing: border-box; }
+    body { background: radial-gradient(1200px 800px at 20% -10%, #1a1a24 0%, transparent 60%), radial-gradient(900px 800px at 100% 0%, #10101a 0%, transparent 60%), var(--bg); color: var(--text); font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+    .wrap { max-width: 1280px; margin: 0 auto; padding: 24px 20px 40px; }
+    h1 { font-size: 22px; letter-spacing: 0.2px; font-weight: 700; margin: 0 0 14px; }
+    .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .toolbar input { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; outline: none; transition: border .2s ease, box-shadow .2s ease; }
+    .toolbar input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,140,255,0.2); }
+    .toolbar button { background: linear-gradient(180deg, var(--accent), #3f6fde); color: white; border: none; padding: 10px 14px; border-radius: 10px; cursor: pointer; font-weight: 600; letter-spacing: 0.2px; box-shadow: var(--shadow); transition: transform .05s ease, filter .2s ease; }
+    .toolbar button:hover { filter: brightness(1.05); }
+    .toolbar button:active { transform: translateY(1px); }
+    .tabs { position: sticky; top: 0; z-index: 5; backdrop-filter: saturate(140%) blur(6px); display: flex; gap: 8px; padding: 8px 0; margin: 6px 0 14px; border-bottom: 1px solid var(--border); }
+    .tab { padding: 8px 14px; border: 1px solid var(--border); cursor: pointer; border-radius: 999px; background: var(--surface); color: var(--muted); transition: all .2s ease; font-weight: 600; }
+    .tab:hover { color: var(--text); }
+    .tab.active { background: linear-gradient(180deg, rgba(91,140,255,.15), rgba(91,140,255,.08)); color: var(--text); border-color: #3a3a48; }
     .panel { display: none; }
     .panel.active { display: block; }
-    .grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
-    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-    .col { display: grid; grid-template-columns: 1fr; gap: 20px; }
-    .box { border: 1px solid #333; padding: 10px; border-radius: 8px; background: #171717; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { border-bottom: 1px solid #333; padding: 6px 8px; text-align: left; }
-    h2 { margin: 0 0 10px; font-size: 16px; color: #ddd; }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 18px; }
+    .row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    @media (max-width: 980px) { .row { grid-template-columns: 1fr; } }
+    .col { display: grid; grid-template-columns: 1fr; gap: 18px; }
+    .box { border: 1px solid var(--border); padding: 14px; border-radius: 14px; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.0)); box-shadow: var(--shadow); }
+    .box h2 { margin: 0 0 10px; font-size: 14px; color: var(--muted); font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .mini-btn { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 999px; padding: 6px 10px; cursor: pointer; font-size: 12px; font-weight: 600; }
+    .mini-btn:hover { border-color: #3a3a48; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid var(--border); padding: 6px 8px; text-align: left; }
+    th { color: var(--muted); font-weight: 600; }
+    /* KPI grid */
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+    .kpi { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; padding: 12px; box-shadow: var(--shadow); display: grid; gap: 6px; }
+    .kpi .label { color: var(--muted); font-size: 12px; letter-spacing: 0.2px; }
+    .kpi .value { font-size: 18px; font-weight: 700; letter-spacing: 0.3px; }
+    .kpi .value .unit { font-size: 12px; color: var(--muted); margin-left: 6px; font-weight: 600; }
+    .kpi.good .value { color: var(--accent-2); }
+    .kpi.bad .value { color: #f27777; }
   </style>
 </head>
 <body>
-  <h1>Strategy Evaluation Dashboard</h1>
-  <div>
-    <label>Data folder: </label>
-    <input id="folderInput" type="text" value="example_run" style="width: 300px" />
-    <button onclick="loadAll()">Load</button>
-  </div>
+  <div class="wrap">
+    <h1>Strategy Evaluation Dashboard</h1>
+    <div class="toolbar">
+      <label for="folderInput" style="color: var(--muted); font-weight:600;">Data folder</label>
+      <input id="folderInput" type="text" value="example_run" style="width: 320px" />
+      <button onclick="loadAll()">Load</button>
+    </div>
 
-  <div class="tabs">
-    <div class="tab active" data-target="is">In-Sample</div>
-    <div class="tab" data-target="is_mc">IS Permutations</div>
-    <div class="tab" data-target="oos_wf">OOS Walk-Forward</div>
-    <div class="tab" data-target="oos_wf_mc">OOS WF Permutations</div>
-  </div>
+    <div class="tabs">
+      <div class="tab active" data-target="is">In-Sample</div>
+      <div class="tab" data-target="is_mc">IS Permutations</div>
+      <div class="tab" data-target="oos_wf">OOS Walk-Forward</div>
+      <div class="tab" data-target="oos_wf_mc">OOS WF Permutations</div>
+    </div>
 
-  <div id="is" class="panel active">
-    <div class="grid">
-      <div class="col">
-        <div class="box"><h2>Cumulative Log Returns</h2><div id="is_cum_log"></div></div>
-        <div class="box"><h2>Cumulative Simple Returns</h2><div id="is_cum_simple"></div></div>
-        <div class="box"><h2>Underwater (Drawdown)</h2><div id="is_dd"></div></div>
-      </div>
-      <div class="row">
-        <div class="box"><h2>Rolling Sharpe</h2><div id="is_rolling_sharpe"></div></div>
-        <div class="box"><h2>Bar Returns</h2><div id="is_bar_rets"></div></div>
-      </div>
-      <div class="row">
-        <div class="box"><h2>Bar Returns Histogram</h2><div id="is_bar_hist"></div></div>
-        <div class="box"><h2>Run Metrics</h2><div id="is_metrics"></div></div>
-      </div>
-      <div class="row">
-        <div class="box"><h2>Run Parameters</h2><div id="is_params"></div></div>
-        <div class="box"><h2></h2><div></div></div>
+    <div id="is" class="panel active">
+      <div class="grid">
+        <div class="col">
+          <div class="box"><h2>Key Metrics</h2><div id="is_kpis" class="kpis"></div></div>
+          <div class="box"><h2>Cumulative Log Returns</h2><div id="is_cum_log"></div></div>
+          <div class="box"><h2>Cumulative Simple Returns <button id="toggle_cum_simple" class="mini-btn">Log scale</button></h2><div id="is_cum_simple"></div></div>
+          <div class="box"><h2>Underwater (Drawdown)</h2><div id="is_dd"></div></div>
+        </div>
+        <div class="row">
+          <div class="box"><h2>Rolling Sharpe</h2><div id="is_rolling_sharpe"></div></div>
+          <div class="box"><h2>Bar Returns</h2><div id="is_bar_rets"></div></div>
+        </div>
+        <div class="row">
+          <div class="box"><h2>Bar Returns Histogram</h2><div id="is_bar_hist"></div></div>
+          <div class="box"><h2>Run Metrics</h2><div id="is_metrics"></div></div>
+        </div>
+        <div class="row">
+          <div class="box"><h2>Run Parameters</h2><div id="is_params"></div></div>
+        </div>
       </div>
     </div>
-  </div>
 
-  <div id="is_mc" class="panel">
+    <div id="is_mc" class="panel">
     <div class="grid">
       <div class="row">
         <div class="box"><h2>Permutation PF (Net) Histogram</h2><div id="is_mc_hist"></div></div>
@@ -69,9 +104,9 @@
         <div class="box"><h2>Run Parameters</h2><div id="is_mc_params"></div></div>
       </div>
     </div>
-  </div>
+    </div>
 
-  <div id="oos_wf" class="panel">
+    <div id="oos_wf" class="panel">
     <div class="grid">
       <div class="col">
         <div class="box"><h2>OOS Cumulative Log (Gross vs Net)</h2><div id="oos_wf_cum"></div></div>
@@ -82,9 +117,9 @@
         <div class="box"><h2>Run Parameters</h2><div id="oos_wf_params"></div></div>
       </div>
     </div>
-  </div>
+    </div>
 
-  <div id="oos_wf_mc" class="panel">
+    <div id="oos_wf_mc" class="panel">
     <div class="grid">
       <div class="row">
         <div class="box"><h2>Permutation PF (Net) Histogram</h2><div id="oos_wf_mc_hist"></div></div>
@@ -93,6 +128,7 @@
       <div class="row">
         <div class="box"><h2>Run Parameters</h2><div id="oos_wf_mc_params"></div></div>
       </div>
+    </div>
     </div>
   </div>
 
@@ -129,6 +165,60 @@
       if (!hasData) panel.querySelectorAll('.box').forEach(b => b.innerHTML = '<div class="box"><i>No data</i></div>');
     }
 
+    function renderKpis(containerId, metrics) {
+      const el = document.getElementById(containerId);
+      if (!metrics) { el.innerHTML = '<i>No data</i>'; return; }
+      const fmt = (v, d=2) => Number.isFinite(Number(v)) ? Number(v).toFixed(d) : '-';
+      const p = (v) => Number.isFinite(Number(v)) ? `${Number(v).toFixed(2)}%` : '-';
+      const items = [
+        { label: 'PF Gross', value: fmt(metrics.pf_gross, 3), good: Number(metrics.pf_gross) >= 1.2 },
+        { label: 'PF Net', value: fmt(metrics.pf_net, 3), good: Number(metrics.pf_net) >= 1.1 },
+        { label: 'Sharpe Gross', value: fmt(metrics.sharpe_gross, 2), good: Number(metrics.sharpe_gross) >= 1.0 },
+        { label: 'Sharpe Net', value: fmt(metrics.sharpe_net, 2), good: Number(metrics.sharpe_net) >= 1.0 },
+        { label: 'Gross Log Ret', value: p(metrics.pct_return_log_gross), good: Number(metrics.pct_return_log_gross) >= 0 },
+        { label: 'Net Log Ret', value: p(metrics.pct_return_log_net), good: Number(metrics.pct_return_log_net) >= 0 },
+        { label: 'Gross Simple Ret', value: p(metrics.pct_return_simple_gross), good: Number(metrics.pct_return_simple_gross) >= 0 },
+        { label: 'Net Simple Ret', value: p(metrics.pct_return_simple_net), good: Number(metrics.pct_return_simple_net) >= 0 },
+      ];
+      el.innerHTML = items.map(it => `<div class="kpi ${it.good ? 'good' : 'bad'}"><div class="label">${it.label}</div><div class="value">${it.value}</div></div>`).join('');
+    }
+
+    // Helpers for binning and stats
+    function toFinite(arr) {
+      return (arr || []).filter(v => Number.isFinite(v));
+    }
+    function quantile(arr, q) {
+      const a = toFinite(arr).slice().sort((x, y) => x - y);
+      if (a.length === 0) return NaN;
+      const pos = (a.length - 1) * q;
+      const base = Math.floor(pos);
+      const rest = pos - base;
+      return a[base + 1] !== undefined ? a[base] + rest * (a[base + 1] - a[base]) : a[base];
+    }
+    function mean(arr) {
+      const a = toFinite(arr);
+      if (a.length === 0) return NaN;
+      return a.reduce((s, v) => s + v, 0) / a.length;
+    }
+    function std(arr) {
+      const a = toFinite(arr);
+      if (a.length < 2) return NaN;
+      const m = mean(a);
+      const v = a.reduce((s, x) => s + (x - m) * (x - m), 0) / (a.length - 1);
+      return Math.sqrt(v);
+    }
+    // Transform cumulative simple returns [-1, inf) into equity [0, inf)
+    function toEquity(arr) {
+      return (arr || []).map(v => {
+        const num = Number(v);
+        if (!Number.isFinite(num)) return 1;
+        const e = 1 + num;
+        return e < 0 ? 0 : e; // cap at 0 for -100%
+      });
+    }
+    function clampPositive(arr, eps = 1e-9) {
+      return (arr || []).map(v => (v <= 0 || !Number.isFinite(v) ? eps : v));
+    }
     function plotIS(data) {
       const has = !!data;
       ensurePanelHasData('is', has);
@@ -138,41 +228,98 @@
       const stratGross = data.series.strategy.gross;
       const stratNet = data.series.strategy.net;
       const asset = data.series.asset;
+      const m = data.metrics || {};
 
       Plotly.newPlot('is_cum_log', [
         { x: ts, y: stratGross.cum_log, mode: 'lines', name: 'Strategy Gross (log)' },
         { x: ts, y: stratNet.cum_log, mode: 'lines', name: 'Strategy Net (log)' },
         { x: ts, y: asset.cum_log, mode: 'lines', name: 'Asset (log)', line: { dash: 'dot' } },
-      ], { template: 'plotly_dark', height: 460, margin: { t: 30 } });
+      ], {
+        template: 'plotly_dark', height: 460, margin: { t: 30 },
+        xaxis: { title: 'Time' }, yaxis: { title: 'Cumulative log return' },
+        annotations: [{
+          text: `Gross PF: ${Number(m.pf_gross).toFixed(3)}\nNet PF: ${Number(m.pf_net).toFixed(3)}\nGross Sharpe: ${Number(m.sharpe_gross).toFixed(3)}\nNet Sharpe: ${Number(m.sharpe_net).toFixed(3)}\nGross Log Ret: ${Number(m.pct_return_log_gross).toFixed(2)}%\nNet Log Ret: ${Number(m.pct_return_log_net).toFixed(2)}%`,
+          xref: 'paper', yref: 'paper', x: 1, y: 1, xanchor: 'right', yanchor: 'top', align: 'left',
+          bgcolor: '#111', bordercolor: '#444', borderwidth: 1, opacity: 0.9, font: { size: 10 }
+        }]
+      });
 
-      Plotly.newPlot('is_cum_simple', [
-        { x: ts, y: stratGross.cum_simple, mode: 'lines', name: 'Strategy Gross (simple)' },
-        { x: ts, y: stratNet.cum_simple, mode: 'lines', name: 'Strategy Net (simple)' },
-        { x: ts, y: asset.cum_simple, mode: 'lines', name: 'Asset (simple)', line: { dash: 'dot' } },
-      ], { template: 'plotly_dark', height: 460, margin: { t: 30 } });
+      const equityGross = (stratGross.equity && stratGross.equity.length) ? stratGross.equity : toEquity(stratGross.cum_simple);
+      const equityNet = (stratNet.equity && stratNet.equity.length) ? stratNet.equity : toEquity(stratNet.cum_simple);
+      const equityAsset = (asset.equity && asset.equity.length) ? asset.equity : toEquity(asset.cum_simple);
+      const cumSimpleTraces = [
+        { x: ts, y: equityGross, mode: 'lines', name: 'Strategy Gross (equity)' },
+        { x: ts, y: equityNet, mode: 'lines', name: 'Strategy Net (equity)' },
+        { x: ts, y: equityAsset, mode: 'lines', name: 'Asset (equity)', line: { dash: 'dot' } },
+      ];
+      const cumSimpleLayout = { template: 'plotly_dark', height: 460, margin: { t: 30 }, xaxis: { title: 'Time' }, yaxis: { title: 'Equity (start=1, min=0)' } };
+      Plotly.newPlot('is_cum_simple', cumSimpleTraces, cumSimpleLayout);
+      // store arrays for toggling
+      const cumEl = document.getElementById('is_cum_simple');
+      cumEl._equityGross = equityGross;
+      cumEl._equityNet = equityNet;
+      cumEl._equityAsset = equityAsset;
 
       Plotly.newPlot('is_dd', [
         { x: ts, y: stratGross.drawdown, mode: 'lines', name: 'Gross DD' },
         { x: ts, y: stratNet.drawdown, mode: 'lines', name: 'Net DD' },
-      ], { template: 'plotly_dark', height: 460, margin: { t: 30 } });
+      ], { template: 'plotly_dark', height: 460, margin: { t: 30 }, xaxis: { title: 'Time' }, yaxis: { title: 'Drawdown' } });
 
       Plotly.newPlot('is_rolling_sharpe', [
         { x: ts, y: stratGross.rolling_sharpe, mode: 'lines', name: 'Gross' },
         { x: ts, y: stratNet.rolling_sharpe, mode: 'lines', name: 'Net' },
-      ], { template: 'plotly_dark', height: 360, margin: { t: 30 } });
+      ], { template: 'plotly_dark', height: 360, margin: { t: 30 }, xaxis: { title: 'Time' }, yaxis: { title: 'Annualized Sharpe' } });
 
       Plotly.newPlot('is_bar_rets', [
-        { x: ts, y: stratGross.ret_log, mode: 'lines', name: 'Gross bar log ret' },
-        { x: ts, y: stratNet.ret_log, mode: 'lines', name: 'Net bar log ret' },
-      ], { template: 'plotly_dark', height: 360, margin: { t: 30 } });
+        { x: ts, y: stratGross.ret_log, mode: 'lines', name: 'Gross bar log ret', hovertemplate: 'Time: %{x}<br>Log return: %{y:.6f}<extra>Gross</extra>' },
+        { x: ts, y: stratNet.ret_log, mode: 'lines', name: 'Net bar log ret', hovertemplate: 'Time: %{x}<br>Log return: %{y:.6f}<extra>Net</extra>' },
+      ], { template: 'plotly_dark', height: 360, margin: { t: 30 }, xaxis: { title: 'Time' }, yaxis: { title: 'Bar log return' }, shapes: [ { type: 'line', x0: ts[0], x1: ts[ts.length-1], y0: 0, y1: 0, xref: 'x', yref: 'y', line: { color: '#777', dash: 'dot' } } ] });
+
+      const grossR = toFinite(stratGross.ret_log);
+      const netR = toFinite(stratNet.ret_log);
+      const combined = grossR.concat(netR);
+      let lo = quantile(combined, 0.01);
+      let hi = quantile(combined, 0.99);
+      if (!Number.isFinite(lo) || !Number.isFinite(hi) || lo === hi) { lo = -0.01; hi = 0.01; }
+      const binSize = Math.max((hi - lo) / 80, 1e-6);
+      const muGross = mean(grossR), sdGross = std(grossR);
+      const muNet = mean(netR), sdNet = std(netR);
 
       Plotly.newPlot('is_bar_hist', [
-        { x: stratGross.ret_log, type: 'histogram', opacity: 0.6, name: 'Gross' },
-        { x: stratNet.ret_log, type: 'histogram', opacity: 0.6, name: 'Net' },
-      ], { template: 'plotly_dark', barmode: 'overlay', height: 360, margin: { t: 30 } });
+        { x: grossR, type: 'histogram', opacity: 0.6, name: 'Gross', histnorm: 'probability density', xbins: { start: lo, end: hi, size: binSize }, hovertemplate: 'Return: %{x:.6f}<br>Density: %{y:.3f}<extra>Gross</extra>' },
+        { x: netR, type: 'histogram', opacity: 0.6, name: 'Net', histnorm: 'probability density', xbins: { start: lo, end: hi, size: binSize }, hovertemplate: 'Return: %{x:.6f}<br>Density: %{y:.3f}<extra>Net</extra>' },
+      ], { template: 'plotly_dark', barmode: 'overlay', height: 360, margin: { t: 30 }, xaxis: { title: 'Bar log return', range: [lo, hi] }, yaxis: { title: 'Density' }, shapes: [ { type: 'line', x0: 0, x1: 0, y0: 0, y1: 1, xref: 'x', yref: 'paper', line: { color: '#777', dash: 'dot' } } ], annotations: [{ text: `Gross μ=${Number(muGross).toExponential(2)}, σ=${Number(sdGross).toExponential(2)}\nNet μ=${Number(muNet).toExponential(2)}, σ=${Number(sdNet).toExponential(2)}`, xref: 'paper', yref: 'paper', x: 1, y: 1, xanchor: 'right', yanchor: 'top', align: 'left', bgcolor: '#111', bordercolor: '#444', borderwidth: 1, opacity: 0.9, font: { size: 10 } }] });
 
       makeTable('is_metrics', data.metrics);
       makeTable('is_params', data.params);
+      renderKpis('is_kpis', data.metrics);
+
+      // Toggle button for log/linear scale on cumulative simple returns
+      const toggleBtn = document.getElementById('toggle_cum_simple');
+      if (toggleBtn && !toggleBtn.dataset.wired) {
+        toggleBtn.dataset.wired = '1';
+        toggleBtn.dataset.scale = 'linear';
+        toggleBtn.addEventListener('click', () => {
+          const next = toggleBtn.dataset.scale === 'linear' ? 'log' : 'linear';
+          const el = document.getElementById('is_cum_simple');
+          if (next === 'log') {
+            Plotly.restyle('is_cum_simple', { y: [
+              clampPositive(el._equityGross),
+              clampPositive(el._equityNet),
+              clampPositive(el._equityAsset)
+            ]});
+          } else {
+            Plotly.restyle('is_cum_simple', { y: [
+              el._equityGross,
+              el._equityNet,
+              el._equityAsset
+            ]});
+          }
+          Plotly.relayout('is_cum_simple', { 'yaxis.type': next });
+          toggleBtn.dataset.scale = next;
+          toggleBtn.textContent = next === 'linear' ? 'Log scale' : 'Linear scale';
+        });
+      }
     }
 
     function plotISMC(data) {
@@ -180,13 +327,13 @@
       ensurePanelHasData('is_mc', has);
       if (!has) return;
       Plotly.newPlot('is_mc_hist', [
-        { x: data.series.permutation_pfs_net, type: 'histogram', name: 'Perm Net PF' },
-      ], { template: 'plotly_dark', height: 360, margin: { t: 30 } });
+        { x: data.series.permutation_pfs_net, type: 'histogram', name: 'Perm Net PF', hovertemplate: 'PF: %{x:.3f}<br>Count: %{y}<extra></extra>' },
+      ], { template: 'plotly_dark', height: 360, margin: { t: 30 }, xaxis: { title: 'Net Profit Factor (Permutation)' }, yaxis: { title: 'Count' } });
       if (data.series.timestamps) {
         Plotly.newPlot('is_mc_ts', [
           { x: data.series.timestamps, y: data.series.strategy.gross.cum_log, mode: 'lines', name: 'Gross' },
           { x: data.series.timestamps, y: data.series.strategy.net.cum_log, mode: 'lines', name: 'Net' },
-        ], { template: 'plotly_dark', height: 360, margin: { t: 30 } });
+        ], { template: 'plotly_dark', height: 360, margin: { t: 30 }, xaxis: { title: 'Time' }, yaxis: { title: 'Cumulative log return' } });
       }
       makeTable('is_mc_metrics', data.metrics);
       makeTable('is_mc_params', data.params);
@@ -202,15 +349,15 @@
       Plotly.newPlot('oos_wf_cum', [
         { x: ts, y: gross.cum_log, mode: 'lines', name: 'Gross' },
         { x: ts, y: net.cum_log, mode: 'lines', name: 'Net' },
-      ], { template: 'plotly_dark', height: 460, margin: { t: 30 } });
+      ], { template: 'plotly_dark', height: 460, margin: { t: 30 }, xaxis: { title: 'Time' }, yaxis: { title: 'Cumulative log return' } });
       Plotly.newPlot('oos_wf_dd', [
         { x: ts, y: gross.drawdown, mode: 'lines', name: 'Gross DD' },
         { x: ts, y: net.drawdown, mode: 'lines', name: 'Net DD' },
-      ], { template: 'plotly_dark', height: 460, margin: { t: 30 } });
+      ], { template: 'plotly_dark', height: 460, margin: { t: 30 }, xaxis: { title: 'Time' }, yaxis: { title: 'Drawdown' } });
       Plotly.newPlot('oos_wf_rolling', [
         { x: ts, y: gross.rolling_sharpe, mode: 'lines', name: 'Gross' },
         { x: ts, y: net.rolling_sharpe, mode: 'lines', name: 'Net' },
-      ], { template: 'plotly_dark', height: 360, margin: { t: 30 } });
+      ], { template: 'plotly_dark', height: 360, margin: { t: 30 }, xaxis: { title: 'Time' }, yaxis: { title: 'Annualized Sharpe' } });
       makeTable('oos_wf_params', data.params);
     }
 
@@ -219,8 +366,8 @@
       ensurePanelHasData('oos_wf_mc', has);
       if (!has) return;
       Plotly.newPlot('oos_wf_mc_hist', [
-        { x: data.series.permutation_pfs_net, type: 'histogram', name: 'Perm Net PF' },
-      ], { template: 'plotly_dark', height: 360, margin: { t: 30 } });
+        { x: data.series.permutation_pfs_net, type: 'histogram', name: 'Perm Net PF', hovertemplate: 'PF: %{x:.3f}<br>Count: %{y}<extra></extra>' },
+      ], { template: 'plotly_dark', height: 360, margin: { t: 30 }, xaxis: { title: 'Net Profit Factor (Permutation)' }, yaxis: { title: 'Count' } });
       makeTable('oos_wf_mc_metrics', data.metrics);
       makeTable('oos_wf_mc_params', data.params);
     }
