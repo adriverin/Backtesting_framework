@@ -90,6 +90,46 @@ class WalkForwardMCTester:
         df = self._load_raw()
         return df[(df.index >= self.start_date) & (df.index < self.end_date)]
 
+    def _ensure_price_column_exists(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Ensure the requested price column exists, creating common derived ones if needed.
+
+        Supports:
+        - 'median'   = (high + low) / 2
+        - 'typical'  = (high + low + close) / 3
+        - 'vwap'     = rolling VWAP over 20 bars (requires volume)
+        """
+        price_column = self.price_column
+        if price_column in df.columns:
+            return df
+
+        df = df.copy()
+        col = price_column
+        if col == "median":
+            if all(c in df.columns for c in ["high", "low"]):
+                df[col] = (df["high"] + df["low"]) / 2
+                print(f"--- Created '{col}' column on-the-fly. ---")
+                return df
+            raise KeyError("Cannot create 'median' column: missing 'high' or 'low'.")
+        if col == "typical":
+            if all(c in df.columns for c in ["high", "low", "close"]):
+                df[col] = (df["high"] + df["low"] + df["close"]) / 3
+                print(f"--- Created '{col}' column on-the-fly. ---")
+                return df
+            raise KeyError("Cannot create 'typical' column: missing 'high', 'low' or 'close'.")
+        if col == "vwap":
+            required = ["high", "low", "close", "volume"]
+            if all(c in df.columns for c in required):
+                vwap_window = 20
+                typical_price = (df["high"] + df["low"] + df["close"]) / 3
+                tpv = typical_price * df["volume"]
+                cumulative_tpv = tpv.rolling(window=vwap_window, min_periods=1).sum()
+                cumulative_volume = df["volume"].rolling(window=vwap_window, min_periods=1).sum()
+                df[col] = (cumulative_tpv / cumulative_volume).fillna(method="ffill")
+                print(f"--- Created rolling 'vwap' ({vwap_window}-bar) column on-the-fly. ---")
+                return df
+            raise KeyError("Cannot create 'vwap' column: missing one of 'high','low','close','volume'.")
+        raise KeyError(f"Price column '{price_column}' not found in DataFrame and cannot be derived.")
+
     def _get_perm_df_with_seed(self, seed: int) -> pd.DataFrame:
         full_df = self._load_raw()
         perm_df = get_permutation(full_df, start_index=self.perm_start_index, seed=seed)
@@ -125,6 +165,7 @@ class WalkForwardMCTester:
             long_lookback_ctx = self.train_lookback  # conservative
             signal_calc_start = max(0, train_end - long_lookback_ctx)
             calc_df = ohlc.iloc[signal_calc_start:oos_end]
+            calc_df = self._ensure_price_column_exists(calc_df)
             oos_signals_full = strategy.generate_signals(calc_df)
 
             # Extract only new OOS section signals
@@ -140,6 +181,7 @@ class WalkForwardMCTester:
 
     def plot_oos_walkforward(self):
         real_df = self.get_df()
+        real_df = self._ensure_price_column_exists(real_df)
         print(
             f"Calculating walk-forward signals for real data from {self.start_date} to {self.end_date}"
         )
@@ -214,6 +256,7 @@ class WalkForwardMCTester:
         print("Starting OOS MC permutations …")
         for perm_i in tqdm(range(self.n_perm)):
             perm_df = self._get_perm_df_with_seed(perm_i)
+            perm_df = self._ensure_price_column_exists(perm_df)
             perm_signals = self._walkforward_signals(perm_df)
             perm_df["r"] = np.log(perm_df[self.price_column]).diff().shift(-1)
             perm_df["simple_r"] = perm_df[self.price_column].pct_change().shift(-1)
