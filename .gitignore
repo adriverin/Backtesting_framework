@@ -1,0 +1,6 @@
+data/**/*.parquet
+__pycache__/
+*.pyc
+.DS_Store
+reports/.DS_Store
+strategies/.DS_Store
