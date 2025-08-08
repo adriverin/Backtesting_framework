@@ -1,0 +1,299 @@
+Cryptocurrency Asset OHLCV Cache Summary
+=========================================
+
+Created: 2025-07-17T11:54:42.096759
+Cache Type: OHLCV (Open, High, Low, Close, Volume)
+Interval: 1d
+Requested Range: 2010-01-01 to 2030-12-31
+Total Assets: 26
+Successful: 26
+Failed: 0
+
+Asset Details:
+--------------------------------------------------
+
+BTC-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2017-08-17 to 2025-07-17
+  Bars: 2,892
+  Coverage: 4.17%
+  Trading Days: 2,891
+  Gaps: 2891
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_BTCUSD_1d.parquet
+
+ETH-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2017-08-17 to 2025-07-17
+  Bars: 2,892
+  Coverage: 4.17%
+  Trading Days: 2,891
+  Gaps: 2891
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_ETHUSD_1d.parquet
+
+SOL-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2020-08-11 to 2025-07-17
+  Bars: 1,802
+  Coverage: 4.17%
+  Trading Days: 1,801
+  Gaps: 1801
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_SOLUSD_1d.parquet
+
+ADA-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2018-04-17 to 2025-07-17
+  Bars: 2,649
+  Coverage: 4.17%
+  Trading Days: 2,648
+  Gaps: 2648
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_ADAUSD_1d.parquet
+
+AVAX-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2020-09-22 to 2025-07-17
+  Bars: 1,760
+  Coverage: 4.17%
+  Trading Days: 1,759
+  Gaps: 1759
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_AVAXUSD_1d.parquet
+
+BNB-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2017-11-06 to 2025-07-17
+  Bars: 2,811
+  Coverage: 4.17%
+  Trading Days: 2,810
+  Gaps: 2810
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_BNBUSD_1d.parquet
+
+XRP-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2018-05-04 to 2025-07-17
+  Bars: 2,632
+  Coverage: 4.17%
+  Trading Days: 2,631
+  Gaps: 2631
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_XRPUSD_1d.parquet
+
+LTC-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2017-12-13 to 2025-07-17
+  Bars: 2,774
+  Coverage: 4.17%
+  Trading Days: 2,773
+  Gaps: 2773
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_LTCUSD_1d.parquet
+
+LINK-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2019-01-16 to 2025-07-17
+  Bars: 2,375
+  Coverage: 4.17%
+  Trading Days: 2,374
+  Gaps: 2374
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_LINKUSD_1d.parquet
+
+XLM-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2018-05-31 to 2025-07-17
+  Bars: 2,605
+  Coverage: 4.17%
+  Trading Days: 2,604
+  Gaps: 2604
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_XLMUSD_1d.parquet
+
+ATOM-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2019-04-29 to 2025-07-17
+  Bars: 2,272
+  Coverage: 4.17%
+  Trading Days: 2,271
+  Gaps: 2271
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_ATOMUSD_1d.parquet
+
+HBAR-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2019-09-29 to 2025-07-17
+  Bars: 2,119
+  Coverage: 4.17%
+  Trading Days: 2,118
+  Gaps: 2118
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_HBARUSD_1d.parquet
+
+BCH-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2019-11-28 to 2025-07-17
+  Bars: 2,059
+  Coverage: 4.17%
+  Trading Days: 2,058
+  Gaps: 2058
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_BCHUSD_1d.parquet
+
+DOT-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2020-08-18 to 2025-07-17
+  Bars: 1,795
+  Coverage: 4.17%
+  Trading Days: 1,794
+  Gaps: 1794
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_DOTUSD_1d.parquet
+
+UNI-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2020-09-17 to 2025-07-17
+  Bars: 1,765
+  Coverage: 4.17%
+  Trading Days: 1,764
+  Gaps: 1764
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_UNIUSD_1d.parquet
+
+AAVE-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2020-10-15 to 2025-07-17
+  Bars: 1,737
+  Coverage: 4.17%
+  Trading Days: 1,736
+  Gaps: 1736
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_AAVEUSD_1d.parquet
+
+SCRT-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2022-01-21 to 2025-07-17
+  Bars: 1,274
+  Coverage: 4.17%
+  Trading Days: 1,273
+  Gaps: 1273
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_SCRTUSD_1d.parquet
+
+ALGO-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2019-06-22 to 2025-07-17
+  Bars: 2,218
+  Coverage: 4.17%
+  Trading Days: 2,217
+  Gaps: 2217
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_ALGOUSD_1d.parquet
+
+VET-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2018-07-25 to 2025-07-17
+  Bars: 2,550
+  Coverage: 4.17%
+  Trading Days: 2,549
+  Gaps: 2549
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_VETUSD_1d.parquet
+
+XTZ-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2019-09-24 to 2025-07-17
+  Bars: 2,124
+  Coverage: 4.17%
+  Trading Days: 2,123
+  Gaps: 2123
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_XTZUSD_1d.parquet
+
+DOGE-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2019-07-05 to 2025-07-17
+  Bars: 2,205
+  Coverage: 4.17%
+  Trading Days: 2,204
+  Gaps: 2204
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_DOGEUSD_1d.parquet
+
+PEPE-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2023-05-05 to 2025-07-17
+  Bars: 805
+  Coverage: 4.17%
+  Trading Days: 804
+  Gaps: 804
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_PEPEUSD_1d.parquet
+
+SHIB-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2021-05-10 to 2025-07-17
+  Bars: 1,530
+  Coverage: 4.17%
+  Trading Days: 1,529
+  Gaps: 1529
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_SHIBUSD_1d.parquet
+
+BONK-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2023-12-15 to 2025-07-17
+  Bars: 581
+  Coverage: 4.17%
+  Trading Days: 580
+  Gaps: 580
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_BONKUSD_1d.parquet
+
+WIF-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2024-03-05 to 2025-07-17
+  Bars: 500
+  Coverage: 4.18%
+  Trading Days: 499
+  Gaps: 499
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_WIFUSD_1d.parquet
+
+FLOKI-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2023-05-05 to 2025-07-17
+  Bars: 805
+  Coverage: 4.17%
+  Trading Days: 804
+  Gaps: 804
+  Columns: open, high, low, close, volume
+  Cache File: ohlcv_FLOKIUSD_1d.parquet

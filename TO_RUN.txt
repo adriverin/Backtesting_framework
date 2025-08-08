@@ -1,9 +1,0 @@
-Now we need an html dashboard showing the plots and the information about the runs. Ideally, the 4 steps (in sample, in sample permutations, oos wf and oos wf permutations) would be on the same dashboard (maybe on different tabs). However it should work in a modular fashion: if we only have the information of any of the tests (running the 4 is a lot of compute, furthermore for some models only the first two will be run and discarded). I let you decide how to do it best, however my first thought is to save the information from each run in a file (maybe JSON?) and that the html dasboard reads it from there.
-
-The plotting should be using plotly and we should show:
-1. cummulative log and simple returns
-2. underwater plot for drawdown
-3. timeframe returns and its histogram distribution
-4. rolling sharpe ratio
-5. a table with all the important values 
-6. a table with the parameters used for the run

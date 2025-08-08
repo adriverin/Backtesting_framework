@@ -1,0 +1,482 @@
+{
+  "creation_date": "2025-07-17T11:51:52.740989",
+  "requested_range": {
+    "start": "2010-01-01",
+    "end": "2030-12-31"
+  },
+  "interval": "4h",
+  "cache_type": "ohlcv",
+  "total_assets": 26,
+  "successful_assets": 26,
+  "failed_assets": 0,
+  "assets": {
+    "BTC-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2017-08-17",
+      "available_to": "2025-07-17",
+      "total_bars": 17332,
+      "data_coverage_pct": 24.98,
+      "large_gaps_detected": "3",
+      "trading_days": 2891,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_BTCUSD_4h.parquet"
+    },
+    "ETH-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2017-08-17",
+      "available_to": "2025-07-17",
+      "total_bars": 17332,
+      "data_coverage_pct": 24.98,
+      "large_gaps_detected": "3",
+      "trading_days": 2891,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_ETHUSD_4h.parquet"
+    },
+    "SOL-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2020-08-11",
+      "available_to": "2025-07-17",
+      "total_bars": 10808,
+      "data_coverage_pct": 25.0,
+      "large_gaps_detected": "0",
+      "trading_days": 1801,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_SOLUSD_4h.parquet"
+    },
+    "ADA-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2018-04-17",
+      "available_to": "2025-07-17",
+      "total_bars": 15881,
+      "data_coverage_pct": 24.99,
+      "large_gaps_detected": "2",
+      "trading_days": 2648,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_ADAUSD_4h.parquet"
+    },
+    "AVAX-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2020-09-22",
+      "available_to": "2025-07-17",
+      "total_bars": 10556,
+      "data_coverage_pct": 25.0,
+      "large_gaps_detected": "0",
+      "trading_days": 1759,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_AVAXUSD_4h.parquet"
+    },
+    "BNB-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2017-11-06",
+      "available_to": "2025-07-17",
+      "total_bars": 16847,
+      "data_coverage_pct": 24.98,
+      "large_gaps_detected": "3",
+      "trading_days": 2810,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_BNBUSD_4h.parquet"
+    },
+    "XRP-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2018-05-04",
+      "available_to": "2025-07-17",
+      "total_bars": 15778,
+      "data_coverage_pct": 24.99,
+      "large_gaps_detected": "2",
+      "trading_days": 2631,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_XRPUSD_4h.parquet"
+    },
+    "LTC-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2017-12-13",
+      "available_to": "2025-07-17",
+      "total_bars": 16625,
+      "data_coverage_pct": 24.98,
+      "large_gaps_detected": "3",
+      "trading_days": 2773,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_LTCUSD_4h.parquet"
+    },
+    "LINK-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2019-01-16",
+      "available_to": "2025-07-17",
+      "total_bars": 14240,
+      "data_coverage_pct": 24.99,
+      "large_gaps_detected": "1",
+      "trading_days": 2374,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_LINKUSD_4h.parquet"
+    },
+    "XLM-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2018-05-31",
+      "available_to": "2025-07-17",
+      "total_bars": 15616,
+      "data_coverage_pct": 24.99,
+      "large_gaps_detected": "2",
+      "trading_days": 2604,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_XLMUSD_4h.parquet"
+    },
+    "ATOM-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2019-04-29",
+      "available_to": "2025-07-17",
+      "total_bars": 13624,
+      "data_coverage_pct": 24.99,
+      "large_gaps_detected": "1",
+      "trading_days": 2271,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_ATOMUSD_4h.parquet"
+    },
+    "HBAR-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2019-09-29",
+      "available_to": "2025-07-17",
+      "total_bars": 12709,
+      "data_coverage_pct": 25.0,
+      "large_gaps_detected": "0",
+      "trading_days": 2118,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_HBARUSD_4h.parquet"
+    },
+    "BCH-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2019-11-28",
+      "available_to": "2025-07-17",
+      "total_bars": 12348,
+      "data_coverage_pct": 25.0,
+      "large_gaps_detected": "0",
+      "trading_days": 2058,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_BCHUSD_4h.parquet"
+    },
+    "DOT-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2020-08-18",
+      "available_to": "2025-07-17",
+      "total_bars": 10762,
+      "data_coverage_pct": 25.0,
+      "large_gaps_detected": "0",
+      "trading_days": 1793,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_DOTUSD_4h.parquet"
+    },
+    "UNI-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2020-09-17",
+      "available_to": "2025-07-17",
+      "total_bars": 10587,
+      "data_coverage_pct": 25.0,
+      "large_gaps_detected": "0",
+      "trading_days": 1764,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_UNIUSD_4h.parquet"
+    },
+    "AAVE-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2020-10-15",
+      "available_to": "2025-07-17",
+      "total_bars": 10419,
+      "data_coverage_pct": 25.0,
+      "large_gaps_detected": "0",
+      "trading_days": 1736,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_AAVEUSD_4h.parquet"
+    },
+    "SCRT-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2022-01-21",
+      "available_to": "2025-07-17",
+      "total_bars": 7638,
+      "data_coverage_pct": 25.0,
+      "large_gaps_detected": "0",
+      "trading_days": 1272,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_SCRTUSD_4h.parquet"
+    },
+    "ALGO-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2019-06-22",
+      "available_to": "2025-07-17",
+      "total_bars": 13303,
+      "data_coverage_pct": 25.0,
+      "large_gaps_detected": "0",
+      "trading_days": 2217,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_ALGOUSD_4h.parquet"
+    },
+    "VET-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2018-07-25",
+      "available_to": "2025-07-17",
+      "total_bars": 15290,
+      "data_coverage_pct": 24.99,
+      "large_gaps_detected": "1",
+      "trading_days": 2549,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_VETUSD_4h.parquet"
+    },
+    "XTZ-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2019-09-24",
+      "available_to": "2025-07-17",
+      "total_bars": 12738,
+      "data_coverage_pct": 25.0,
+      "large_gaps_detected": "0",
+      "trading_days": 2123,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_XTZUSD_4h.parquet"
+    },
+    "DOGE-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2019-07-05",
+      "available_to": "2025-07-17",
+      "total_bars": 13222,
+      "data_coverage_pct": 25.0,
+      "large_gaps_detected": "0",
+      "trading_days": 2203,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_DOGEUSD_4h.parquet"
+    },
+    "PEPE-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2023-05-05",
+      "available_to": "2025-07-17",
+      "total_bars": 4823,
+      "data_coverage_pct": 25.01,
+      "large_gaps_detected": "0",
+      "trading_days": 803,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_PEPEUSD_4h.parquet"
+    },
+    "SHIB-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2021-05-10",
+      "available_to": "2025-07-17",
+      "total_bars": 9175,
+      "data_coverage_pct": 25.0,
+      "large_gaps_detected": "0",
+      "trading_days": 1529,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_SHIBUSD_4h.parquet"
+    },
+    "BONK-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2023-12-15",
+      "available_to": "2025-07-17",
+      "total_bars": 3481,
+      "data_coverage_pct": 25.01,
+      "large_gaps_detected": "0",
+      "trading_days": 580,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_BONKUSD_4h.parquet"
+    },
+    "WIF-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2024-03-05",
+      "available_to": "2025-07-17",
+      "total_bars": 2994,
+      "data_coverage_pct": 25.01,
+      "large_gaps_detected": "0",
+      "trading_days": 498,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_WIFUSD_4h.parquet"
+    },
+    "FLOKI-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2023-05-05",
+      "available_to": "2025-07-17",
+      "total_bars": 4823,
+      "data_coverage_pct": 25.01,
+      "large_gaps_detected": "0",
+      "trading_days": 803,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "cache_file": "ohlcv_FLOKIUSD_4h.parquet"
+    }
+  }
+}
