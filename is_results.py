@@ -360,7 +360,7 @@ if __name__ == "__main__":
         end_date="2024-01-01",
         # strategy_name="ma",
         strategy_name="ml",
-        asset="VETUSD",
+        asset="BTCUSD",
         timeframe="1h",
         show_plot=True,
         strategy_kwargs=ml_params,
