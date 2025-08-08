@@ -5,7 +5,7 @@ from typing import Any, Tuple
 
 import pandas as pd
 
-from basic_strats import optimize_moving_average, moving_average
+from .basic_strats import optimize_moving_average, moving_average
 
 from .base_strategy import BaseStrategy
 
