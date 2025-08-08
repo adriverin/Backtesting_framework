@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trading Strategy Dashboard</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    body { background: #111; color: #eee; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    .tabs { display: flex; gap: 10px; margin: 10px 0; }
+    .tab { padding: 8px 12px; border: 1px solid #444; cursor: pointer; border-radius: 6px; }
+    .tab.active { background: #333; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .col { display: grid; grid-template-columns: 1fr; gap: 20px; }
+    .box { border: 1px solid #333; padding: 10px; border-radius: 8px; background: #171717; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid #333; padding: 6px 8px; text-align: left; }
+    h2 { margin: 0 0 10px; font-size: 16px; color: #ddd; }
+  </style>
+</head>
+<body>
+  <h1>Strategy Evaluation Dashboard</h1>
+  <div>
+    <label>Data folder: </label>
+    <input id="folderInput" type="text" value="example_run" style="width: 300px" />
+    <button onclick="loadAll()">Load</button>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-target="is">In-Sample</div>
+    <div class="tab" data-target="is_mc">IS Permutations</div>
+    <div class="tab" data-target="oos_wf">OOS Walk-Forward</div>
+    <div class="tab" data-target="oos_wf_mc">OOS WF Permutations</div>
+  </div>
+
+  <div id="is" class="panel active">
+    <div class="grid">
+      <div class="col">
+        <div class="box"><h2>Cumulative Log Returns</h2><div id="is_cum_log"></div></div>
+        <div class="box"><h2>Cumulative Simple Returns</h2><div id="is_cum_simple"></div></div>
+        <div class="box"><h2>Underwater (Drawdown)</h2><div id="is_dd"></div></div>
+      </div>
+      <div class="row">
+        <div class="box"><h2>Rolling Sharpe</h2><div id="is_rolling_sharpe"></div></div>
+        <div class="box"><h2>Bar Returns</h2><div id="is_bar_rets"></div></div>
+      </div>
+      <div class="row">
+        <div class="box"><h2>Bar Returns Histogram</h2><div id="is_bar_hist"></div></div>
+        <div class="box"><h2>Run Metrics</h2><div id="is_metrics"></div></div>
+      </div>
+      <div class="row">
+        <div class="box"><h2>Run Parameters</h2><div id="is_params"></div></div>
+        <div class="box"><h2></h2><div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="is_mc" class="panel">
+    <div class="grid">
+      <div class="row">
+        <div class="box"><h2>Permutation PF (Net) Histogram</h2><div id="is_mc_hist"></div></div>
+        <div class="box"><h2>IS Gross vs Net (Log)</h2><div id="is_mc_ts"></div></div>
+      </div>
+      <div class="row">
+        <div class="box"><h2>Run Metrics</h2><div id="is_mc_metrics"></div></div>
+        <div class="box"><h2>Run Parameters</h2><div id="is_mc_params"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="oos_wf" class="panel">
+    <div class="grid">
+      <div class="col">
+        <div class="box"><h2>OOS Cumulative Log (Gross vs Net)</h2><div id="oos_wf_cum"></div></div>
+        <div class="box"><h2>OOS Underwater (Drawdown)</h2><div id="oos_wf_dd"></div></div>
+      </div>
+      <div class="row">
+        <div class="box"><h2>OOS Rolling Sharpe</h2><div id="oos_wf_rolling"></div></div>
+        <div class="box"><h2>Run Parameters</h2><div id="oos_wf_params"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="oos_wf_mc" class="panel">
+    <div class="grid">
+      <div class="row">
+        <div class="box"><h2>Permutation PF (Net) Histogram</h2><div id="oos_wf_mc_hist"></div></div>
+        <div class="box"><h2>Run Metrics</h2><div id="oos_wf_mc_metrics"></div></div>
+      </div>
+      <div class="row">
+        <div class="box"><h2>Run Parameters</h2><div id="oos_wf_mc_params"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Tab logic
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById(tab.dataset.target).classList.add('active');
+      });
+    });
+
+    async function safeFetch(path) {
+      try {
+        const res = await fetch(path);
+        if (!res.ok) return null;
+        return await res.json();
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function makeTable(containerId, obj) {
+      const el = document.getElementById(containerId);
+      if (!obj) { el.innerHTML = '<i>No data</i>'; return; }
+      const rows = Object.entries(obj).map(([k, v]) => `<tr><th>${k}</th><td>${typeof v === 'object' ? JSON.stringify(v) : v}</td></tr>`).join('');
+      el.innerHTML = `<table>${rows}</table>`;
+    }
+
+    function ensurePanelHasData(panelId, hasData) {
+      const panel = document.getElementById(panelId);
+      if (!hasData) panel.querySelectorAll('.box').forEach(b => b.innerHTML = '<div class="box"><i>No data</i></div>');
+    }
+
+    function plotIS(data) {
+      const has = !!data;
+      ensurePanelHasData('is', has);
+      if (!has) return;
+
+      const ts = data.series.timestamps;
+      const stratGross = data.series.strategy.gross;
+      const stratNet = data.series.strategy.net;
+      const asset = data.series.asset;
+
+      Plotly.newPlot('is_cum_log', [
+        { x: ts, y: stratGross.cum_log, mode: 'lines', name: 'Strategy Gross (log)' },
+        { x: ts, y: stratNet.cum_log, mode: 'lines', name: 'Strategy Net (log)' },
+        { x: ts, y: asset.cum_log, mode: 'lines', name: 'Asset (log)', line: { dash: 'dot' } },
+      ], { template: 'plotly_dark', height: 460, margin: { t: 30 } });
+
+      Plotly.newPlot('is_cum_simple', [
+        { x: ts, y: stratGross.cum_simple, mode: 'lines', name: 'Strategy Gross (simple)' },
+        { x: ts, y: stratNet.cum_simple, mode: 'lines', name: 'Strategy Net (simple)' },
+        { x: ts, y: asset.cum_simple, mode: 'lines', name: 'Asset (simple)', line: { dash: 'dot' } },
+      ], { template: 'plotly_dark', height: 460, margin: { t: 30 } });
+
+      Plotly.newPlot('is_dd', [
+        { x: ts, y: stratGross.drawdown, mode: 'lines', name: 'Gross DD' },
+        { x: ts, y: stratNet.drawdown, mode: 'lines', name: 'Net DD' },
+      ], { template: 'plotly_dark', height: 460, margin: { t: 30 } });
+
+      Plotly.newPlot('is_rolling_sharpe', [
+        { x: ts, y: stratGross.rolling_sharpe, mode: 'lines', name: 'Gross' },
+        { x: ts, y: stratNet.rolling_sharpe, mode: 'lines', name: 'Net' },
+      ], { template: 'plotly_dark', height: 360, margin: { t: 30 } });
+
+      Plotly.newPlot('is_bar_rets', [
+        { x: ts, y: stratGross.ret_log, mode: 'lines', name: 'Gross bar log ret' },
+        { x: ts, y: stratNet.ret_log, mode: 'lines', name: 'Net bar log ret' },
+      ], { template: 'plotly_dark', height: 360, margin: { t: 30 } });
+
+      Plotly.newPlot('is_bar_hist', [
+        { x: stratGross.ret_log, type: 'histogram', opacity: 0.6, name: 'Gross' },
+        { x: stratNet.ret_log, type: 'histogram', opacity: 0.6, name: 'Net' },
+      ], { template: 'plotly_dark', barmode: 'overlay', height: 360, margin: { t: 30 } });
+
+      makeTable('is_metrics', data.metrics);
+      makeTable('is_params', data.params);
+    }
+
+    function plotISMC(data) {
+      const has = !!data;
+      ensurePanelHasData('is_mc', has);
+      if (!has) return;
+      Plotly.newPlot('is_mc_hist', [
+        { x: data.series.permutation_pfs_net, type: 'histogram', name: 'Perm Net PF' },
+      ], { template: 'plotly_dark', height: 360, margin: { t: 30 } });
+      if (data.series.timestamps) {
+        Plotly.newPlot('is_mc_ts', [
+          { x: data.series.timestamps, y: data.series.strategy.gross.cum_log, mode: 'lines', name: 'Gross' },
+          { x: data.series.timestamps, y: data.series.strategy.net.cum_log, mode: 'lines', name: 'Net' },
+        ], { template: 'plotly_dark', height: 360, margin: { t: 30 } });
+      }
+      makeTable('is_mc_metrics', data.metrics);
+      makeTable('is_mc_params', data.params);
+    }
+
+    function plotOOSWF(data) {
+      const has = !!data;
+      ensurePanelHasData('oos_wf', has);
+      if (!has) return;
+      const ts = data.series.timestamps;
+      const gross = data.series.strategy.gross;
+      const net = data.series.strategy.net;
+      Plotly.newPlot('oos_wf_cum', [
+        { x: ts, y: gross.cum_log, mode: 'lines', name: 'Gross' },
+        { x: ts, y: net.cum_log, mode: 'lines', name: 'Net' },
+      ], { template: 'plotly_dark', height: 460, margin: { t: 30 } });
+      Plotly.newPlot('oos_wf_dd', [
+        { x: ts, y: gross.drawdown, mode: 'lines', name: 'Gross DD' },
+        { x: ts, y: net.drawdown, mode: 'lines', name: 'Net DD' },
+      ], { template: 'plotly_dark', height: 460, margin: { t: 30 } });
+      Plotly.newPlot('oos_wf_rolling', [
+        { x: ts, y: gross.rolling_sharpe, mode: 'lines', name: 'Gross' },
+        { x: ts, y: net.rolling_sharpe, mode: 'lines', name: 'Net' },
+      ], { template: 'plotly_dark', height: 360, margin: { t: 30 } });
+      makeTable('oos_wf_params', data.params);
+    }
+
+    function plotOOSWFMC(data) {
+      const has = !!data;
+      ensurePanelHasData('oos_wf_mc', has);
+      if (!has) return;
+      Plotly.newPlot('oos_wf_mc_hist', [
+        { x: data.series.permutation_pfs_net, type: 'histogram', name: 'Perm Net PF' },
+      ], { template: 'plotly_dark', height: 360, margin: { t: 30 } });
+      makeTable('oos_wf_mc_metrics', data.metrics);
+      makeTable('oos_wf_mc_params', data.params);
+    }
+
+    async function loadAll() {
+      const folder = document.getElementById('folderInput').value;
+      const [isData, isMC, oosWF, oosWFMC] = await Promise.all([
+        safeFetch(`${folder}/is.json`),
+        safeFetch(`${folder}/is_mc.json`),
+        safeFetch(`${folder}/oos_wf.json`),
+        safeFetch(`${folder}/oos_wf_mc.json`),
+      ]);
+      plotIS(isData);
+      plotISMC(isMC);
+      plotOOSWF(oosWF);
+      plotOOSWFMC(oosWFMC);
+    }
+
+    loadAll();
+  </script>
+</body>
+</html>
+
