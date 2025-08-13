@@ -295,25 +295,26 @@ class InSampleMCTester:
             plt.title(f"In-sample MC Permutations (net PF, p-value: {p_val:.3f}, N={self.n_perm})")
             plt.legend()
             plt.tight_layout()
-
-            # Time-series: gross vs net + price
-            # Recompute cumulative series on the (already prepared) train_df
-            fig, ax1 = plt.subplots(figsize=(10, 5))
-            ax1.plot(train_df["r"].cumsum(), label="Market Log Returns")
-            ax1.plot(train_df["strategy_r"].cumsum(), label="Strategy Gross (log)")
-            ax1.plot(train_df["strategy_r_net"].cumsum(), label="Strategy Net (log)")
-            ax1.set_xlabel("Date")
-            ax1.set_ylabel("Cumulative Log Return")
-            ax1.set_title("In-Sample Cumulative Returns (Gross vs Net)")
-            ax2 = ax1.twinx()
-            ax2.plot(train_df.index, train_df[self.price_column], color="gray", alpha=0.25, label="Asset Price")
-            ax2.set_ylabel("Price")
-            lines1, labels1 = ax1.get_legend_handles_labels()
-            lines2, labels2 = ax2.get_legend_handles_labels()
-            ax1.legend(lines1 + lines2, labels1 + labels2)
-            ax1.grid(alpha=0.3)
-            fig.tight_layout()
             plt.show()
+            
+            # # Time-series: gross vs net + price
+            # # Recompute cumulative series on the (already prepared) train_df
+            # fig, ax1 = plt.subplots(figsize=(10, 5))
+            # ax1.plot(train_df["r"].cumsum(), label="Market Log Returns")
+            # ax1.plot(train_df["strategy_r"].cumsum(), label="Strategy Gross (log)")
+            # ax1.plot(train_df["strategy_r_net"].cumsum(), label="Strategy Net (log)")
+            # ax1.set_xlabel("Date")
+            # ax1.set_ylabel("Cumulative Log Return")
+            # ax1.set_title("In-Sample Cumulative Returns (Gross vs Net)")
+            # ax2 = ax1.twinx()
+            # ax2.plot(train_df.index, train_df[self.price_column], color="gray", alpha=0.25, label="Asset Price")
+            # ax2.set_ylabel("Price")
+            # lines1, labels1 = ax1.get_legend_handles_labels()
+            # lines2, labels2 = ax2.get_legend_handles_labels()
+            # ax1.legend(lines1 + lines2, labels1 + labels2)
+            # ax1.grid(alpha=0.3)
+            # fig.tight_layout()
+            # plt.show()
 
         # Save JSON report if requested
         if self.save_json_dir:
@@ -392,30 +393,34 @@ def main():
 if __name__ == "__main__":
     # main()
 
-    ml_params = {
-        "interval": "4h",
-        "forecast_horizon_hours": 4,
-        "n_epochs": 150,
-        "hidden_sizes": (256, 128, 64, 32),
-        "signal_percentiles": (10, 90),
-        "train_ratio": 0.8,
-        "val_ratio": 0.2,
-        "early_stopping_patience": 10,
-        "lr": 5e-5,
-        "weight_decay": 0.001,
-        "batch_size": 128,
-        "random_seed": 42,
-        "hold_until_opposite": True,
-        #
-        "sma_windows": (4, 8, 16, 32),
-        "volatility_windows": (4, 8, 16, 32),
-        "momentum_windows": (4, 8, 16, 32, 64),
-        "rsi_windows": (4, 8, 16, 32, 64),
-        # "sma_windows": (5, 10, 20, 30),
-        # "volatility_windows": (5, 10, 20, 30),
-        # "momentum_windows": (7, 14, 21, 30),
-        # "rsi_windows": (7, 14, 21, 30),        
-    }
+    # ml_params = {
+    #     "interval": "4h",
+    #     "forecast_horizon_hours": 4,
+    #     "n_epochs": 250,
+    #     "hidden_sizes": (512, 256, 128, 64, 32),
+    #     "signal_percentiles": (10, 90),
+    #     "train_ratio": 0.8,
+    #     "val_ratio": 0.2,
+    #     "early_stopping_patience": 10,
+    #     "lr": 5e-5,
+    #     "weight_decay": 0.001,
+    #     "batch_size": 128,
+    #     "random_seed": 42,
+    #     "hold_until_opposite": True,
+    #     #
+    #     "sma_windows": (4, 8, 16, 32),
+    #     "volatility_windows": (4, 8, 16, 32),
+    #     "momentum_windows": (4, 8, 16, 32, 64),
+    #     "rsi_windows": (4, 8, 16, 32, 64),
+    #     # "sma_windows": (5, 10, 20, 30),
+    #     # "volatility_windows": (5, 10, 20, 30),
+    #     # "momentum_windows": (7, 14, 21, 30),
+    #     # "rsi_windows": (7, 14, 21, 30),        
+    # }
+
+
+    from is_results import ml_params, ml_params_conservative
+
 
     tester = InSampleMCTester(
         start_date="2018-07-25",
@@ -423,9 +428,10 @@ if __name__ == "__main__":
         strategy_name="ml",
         asset="VETUSD",
         timeframe="4h",
-        n_perm=100,
+        n_perm=50,
         generate_plot=True,
-        strategy_kwargs=ml_params,
+        # strategy_kwargs=ml_params,
+        strategy_kwargs=ml_params_conservative,
         price_column="vwap",
         fee_bps=10.0,
         slippage_bps=10.0,

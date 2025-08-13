@@ -225,6 +225,27 @@ class WalkForward:
 
         real_pf_gross = _profit_factor(real_df["strategy_r"].dropna())
         real_pf_net = _profit_factor(real_df["strategy_r_net"].dropna())
+
+        # Win/loss stats per trade (aggregate contiguous non-zero positions)
+        pos = pd.Series(real_df["signal"]).fillna(0)
+        seg_id = (pos != pos.shift()).cumsum()
+        mask = pos != 0
+        if mask.any():
+            trade_returns = (
+                real_df.loc[mask]
+                       .groupby(seg_id[mask])["strategy_simple_r_net"]
+                       .apply(lambda g: float((1.0 + g).prod() - 1.0))
+            )
+            wins = trade_returns[trade_returns > 0]
+            losses = trade_returns[trade_returns < 0]
+            denom = int(len(trade_returns))
+            win_rate_net_pct = float(len(wins) / denom * 100.0) if denom > 0 else float("nan")
+            avg_win_net_pct = float(wins.mean() * 100.0) if len(wins) > 0 else float("nan")
+            avg_loss_net_pct = float(losses.mean() * 100.0) if len(losses) > 0 else float("nan")
+        else:
+            win_rate_net_pct = float("nan")
+            avg_win_net_pct = float("nan")
+            avg_loss_net_pct = float("nan")
         print(f"OOS real Profit Factor (gross): {real_pf_gross:.4f}")
         print(f"OOS real Profit Factor (net)  : {real_pf_net:.4f}  (fees={self.fee_bps}bps, slip={self.slippage_bps}bps per side)")
 
@@ -299,6 +320,9 @@ class WalkForward:
                 "metrics": {
                     "pf_gross": float(real_pf_gross),
                     "pf_net": float(real_pf_net),
+                    "win_rate_net_pct": win_rate_net_pct,
+                    "avg_win_net_pct": avg_win_net_pct,
+                    "avg_loss_net_pct": avg_loss_net_pct,
                 },
                 "series": {
                     "timestamps": [ts.isoformat() for ts in real_df.index.to_pydatetime()],
