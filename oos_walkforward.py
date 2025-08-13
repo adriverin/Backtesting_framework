@@ -17,6 +17,7 @@ import json
 import os
 
 from strategies import aVAILABLE_STRATEGIES, BaseStrategy  # type: ignore
+from position_sizing import compute_position_weights
 
 # ---------------------------------------------------------------------- #
 # Utility                                                                 #
@@ -107,6 +108,8 @@ class WalkForward:
         strategy_kwargs: dict | None = None,
         fee_bps: float = 0.0,
         slippage_bps: float = 0.0,
+        position_sizing_mode: str = "full_notional",
+        position_sizing_params: dict | None = None,
     ) -> None:
         self.start_date = start_date
         self.end_date = end_date
@@ -120,6 +123,8 @@ class WalkForward:
         self.strategy_kwargs = strategy_kwargs or {}
         self.fee_bps = fee_bps
         self.slippage_bps = slippage_bps
+        self.position_sizing_mode = position_sizing_mode
+        self.position_sizing_params = position_sizing_params or {}
 
         if strategy_name not in aVAILABLE_STRATEGIES:
             raise ValueError(
@@ -211,12 +216,20 @@ class WalkForward:
         real_df["r"] = np.log(real_df[self.price_column]).diff().shift(-1)
         real_df["simple_r"] = real_df[self.price_column].pct_change().shift(-1)
         real_df["signal"] = real_signals
-        real_df["strategy_r"] = real_df["r"] * real_df["signal"]
-        real_df["strategy_simple_r"] = real_df["simple_r"] * real_df["signal"]
+        real_df["weight"] = compute_position_weights(
+            signals=pd.Series(real_signals, index=real_df.index),
+            simple_returns=real_df["simple_r"],
+            price=real_df[self.price_column],
+            timeframe=self.timeframe,
+            mode=self.position_sizing_mode,
+            mode_params=self.position_sizing_params,
+        )
+        real_df["strategy_r"] = real_df["r"] * real_df["weight"]
+        real_df["strategy_simple_r"] = real_df["simple_r"] * real_df["weight"]
 
         # Costs
         fee_rate = (self.fee_bps + self.slippage_bps) / 10000.0
-        turnover = (real_df["signal"].diff().abs()).fillna(real_df["signal"].abs())
+        turnover = (real_df["weight"].diff().abs()).fillna(real_df["weight"].abs())
         real_df["cost_simple"] = fee_rate * turnover
         real_df["strategy_simple_r_net"] = real_df["strategy_simple_r"] - real_df["cost_simple"]
         real_df["strategy_r_net"] = np.log((1.0 + real_df["strategy_simple_r_net"]).clip(lower=1e-12))
@@ -227,7 +240,7 @@ class WalkForward:
         real_pf_net = _profit_factor(real_df["strategy_r_net"].dropna())
 
         # Win/loss stats per trade (aggregate contiguous non-zero positions)
-        pos = pd.Series(real_df["signal"]).fillna(0)
+        pos = pd.Series(real_df["weight"]).fillna(0)
         seg_id = (pos != pos.shift()).cumsum()
         mask = pos != 0
         if mask.any():

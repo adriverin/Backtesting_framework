@@ -29,6 +29,7 @@ from itertools import repeat
 from permutations import get_permutation
 
 from strategies import aVAILABLE_STRATEGIES, BaseStrategy  # type: ignore
+from position_sizing import compute_position_weights
 
 # ---------------------------------------------------------------------- #
 # Helper functions                                                       #
@@ -118,6 +119,8 @@ def _compute_single_perm_pf_net(
     fee_bps: float,
     slippage_bps: float,
     perm_start_index: int,
+    position_sizing_mode: str = "full_notional",
+    position_sizing_params: dict | None = None,
 ) -> float:
     full_fp = Path(f"data/ohlcv_{asset}_{timeframe}.parquet")
     full_df = pd.read_parquet(full_fp)
@@ -134,11 +137,19 @@ def _compute_single_perm_pf_net(
     perm_df["r"] = np.log(perm_df[price_column]).diff().shift(-1)
     perm_df["simple_r"] = perm_df[price_column].pct_change().shift(-1)
     perm_df["signal"] = perm_signals
-    perm_df["strategy_r"] = perm_df["r"] * perm_df["signal"]
-    perm_df["strategy_simple_r"] = perm_df["simple_r"] * perm_df["signal"]
+    perm_df["weight"] = compute_position_weights(
+        signals=pd.Series(perm_signals, index=perm_df.index),
+        simple_returns=perm_df["simple_r"],
+        price=perm_df[price_column],
+        timeframe=timeframe,
+        mode=position_sizing_mode,
+        mode_params=position_sizing_params,
+    )
+    perm_df["strategy_r"] = perm_df["r"] * perm_df["weight"]
+    perm_df["strategy_simple_r"] = perm_df["simple_r"] * perm_df["weight"]
 
     fee_rate = (fee_bps + slippage_bps) / 10000.0
-    turnover = (perm_df["signal"].diff().abs()).fillna(perm_df["signal"].abs())
+    turnover = (perm_df["weight"].diff().abs()).fillna(perm_df["weight"].abs())
     perm_df["cost_simple"] = fee_rate * turnover
     perm_df["strategy_simple_r_net"] = perm_df["strategy_simple_r"] - perm_df["cost_simple"]
     perm_df["strategy_r_net"] = np.log((1.0 + perm_df["strategy_simple_r_net"]).clip(lower=1e-12))
@@ -419,7 +430,7 @@ if __name__ == "__main__":
     # }
 
 
-    from is_results import ml_params, ml_params_conservative, ml_params_mc_safe, ml_params_mc_strict
+    from is_results import ml_params, ml_params_conservative, ml_params_geminipro25, ml_params_deepseekR1, ml_params_kimiK2, ml_params_claudesonnet4
 
 
     tester = InSampleMCTester(
@@ -433,7 +444,7 @@ if __name__ == "__main__":
         # strategy_kwargs=ml_params,
         # strategy_kwargs=ml_params_conservative,
         # strategy_kwargs=ml_params_mc_safe,
-        strategy_kwargs=ml_params,
+        strategy_kwargs=ml_params_deepseekR1,
         price_column="vwap",
         fee_bps=10.0,
         slippage_bps=10.0,
