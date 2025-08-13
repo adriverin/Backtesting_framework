@@ -23,6 +23,8 @@ import pandas as pd
 from tqdm import tqdm
 import json
 import os
+from concurrent.futures import ProcessPoolExecutor
+from itertools import repeat
 
 from permutations import get_permutation
 
@@ -99,6 +101,49 @@ def _ensure_price_column_exists(df: pd.DataFrame, price_column: str) -> pd.DataF
         raise KeyError("Cannot create 'vwap' column: missing one of 'high','low','close','volume'.")
 
     raise KeyError(f"Price column '{price_column}' not found in DataFrame and cannot be derived.")
+
+# ---------------------------------------------------------------------- #
+# Parallel worker                                                         #
+# ---------------------------------------------------------------------- #
+
+def _compute_single_perm_pf_net(
+    seed: int,
+    asset: str,
+    timeframe: str,
+    start_date: str,
+    end_date: str,
+    price_column: str,
+    strategy_name: str,
+    strategy_kwargs: dict,
+    fee_bps: float,
+    slippage_bps: float,
+    perm_start_index: int,
+) -> float:
+    full_fp = Path(f"data/ohlcv_{asset}_{timeframe}.parquet")
+    full_df = pd.read_parquet(full_fp)
+    from permutations import get_permutation  # local import for subprocess
+
+    perm_df = get_permutation(full_df, start_index=perm_start_index, seed=seed)
+    perm_df = perm_df[(perm_df.index >= start_date) & (perm_df.index < end_date)]
+    perm_df = _ensure_price_column_exists(perm_df, price_column)
+
+    strategy = aVAILABLE_STRATEGIES[strategy_name](price_column=price_column, **strategy_kwargs)
+    _ = strategy.optimize(perm_df)
+    perm_signals = strategy.generate_signals(perm_df)
+
+    perm_df["r"] = np.log(perm_df[price_column]).diff().shift(-1)
+    perm_df["simple_r"] = perm_df[price_column].pct_change().shift(-1)
+    perm_df["signal"] = perm_signals
+    perm_df["strategy_r"] = perm_df["r"] * perm_df["signal"]
+    perm_df["strategy_simple_r"] = perm_df["simple_r"] * perm_df["signal"]
+
+    fee_rate = (fee_bps + slippage_bps) / 10000.0
+    turnover = (perm_df["signal"].diff().abs()).fillna(perm_df["signal"].abs())
+    perm_df["cost_simple"] = fee_rate * turnover
+    perm_df["strategy_simple_r_net"] = perm_df["strategy_simple_r"] - perm_df["cost_simple"]
+    perm_df["strategy_r_net"] = np.log((1.0 + perm_df["strategy_simple_r_net"]).clip(lower=1e-12))
+
+    return _profit_factor(perm_df["strategy_r_net"].dropna())
 
 # ---------------------------------------------------------------------- #
 # Config / Runner class                                                  #
@@ -209,33 +254,30 @@ class InSampleMCTester:
         print(f"Calculated In-Sample PF (net)  : {best_real_pf_net:.4f}  (fees={self.fee_bps}bps, slip={self.slippage_bps}bps per side)")
 
 
-        iperms_better = 1  # include real sample
-        permuted_pfs_net: list[float] = []
-        print("Running Monte-Carlo permutations")
-        for perm_i in tqdm(range(1, self.n_perm)):
-            perm_df = self._get_perm_df()
-            perm_df = _ensure_price_column_exists(perm_df, self.price_column)
-            # Fresh strategy instance per permutation to avoid data leakage
-            strategy = aVAILABLE_STRATEGIES[self.strategy_name](price_column=self.price_column, **self.strategy_kwargs)
-            _ = strategy.optimize(perm_df)
-            perm_signals = strategy.generate_signals(perm_df)
-            perm_df["r"] = np.log(perm_df[self.price_column]).diff().shift(-1)
-            perm_df["simple_r"] = perm_df[self.price_column].pct_change().shift(-1)
-            perm_df["signal"] = perm_signals
-            perm_df["strategy_r"] = perm_df["r"] * perm_df["signal"]
-            perm_df["strategy_simple_r"] = perm_df["simple_r"] * perm_df["signal"]
-            # Costs
-            fee_rate = (self.fee_bps + self.slippage_bps) / 10000.0
-            turnover = (perm_df["signal"].diff().abs()).fillna(perm_df["signal"].abs())
-            perm_df["cost_simple"] = fee_rate * turnover
-            perm_df["strategy_simple_r_net"] = perm_df["strategy_simple_r"] - perm_df["cost_simple"]
-            perm_df["strategy_r_net"] = np.log((1.0 + perm_df["strategy_simple_r_net"]).clip(lower=1e-12))
-            perm_pf_net = _profit_factor(perm_df["strategy_r_net"].dropna())
+        print("Running Monte-Carlo permutations (parallel)…")
+        seeds = list(range(1, self.n_perm))
+        with ProcessPoolExecutor() as executor:
+            permuted_pfs_net = list(
+                tqdm(
+                    executor.map(
+                        _compute_single_perm_pf_net,
+                        seeds,
+                        repeat(self.asset),
+                        repeat(self.timeframe),
+                        repeat(self.start_date),
+                        repeat(self.end_date),
+                        repeat(self.price_column),
+                        repeat(self.strategy_name),
+                        repeat(self.strategy_kwargs),
+                        repeat(self.fee_bps),
+                        repeat(self.slippage_bps),
+                        repeat(self.perm_start_index),
+                    ),
+                    total=len(seeds),
+                )
+            )
 
-            if perm_pf_net >= best_real_pf_net:
-                iperms_better += 1
-
-            permuted_pfs_net.append(perm_pf_net)
+        iperms_better = 1 + sum(1 for pf in permuted_pfs_net if pf >= best_real_pf_net)
 
         p_val = iperms_better / self.n_perm
         print(f"In-sample MC p-value: {p_val:.4f}")
@@ -250,7 +292,7 @@ class InSampleMCTester:
             plt.axvline(best_real_pf_net, color="red", label=f"Real (net) = {best_real_pf_net:.2f}")
             plt.xlabel("Profit Factor")
             plt.ylabel("Frequency")
-            plt.title(f"In-sample MC Permutations (net PF, p-value: {p_val:.3f})")
+            plt.title(f"In-sample MC Permutations (net PF, p-value: {p_val:.3f}, N={self.n_perm})")
             plt.legend()
             plt.tight_layout()
 
@@ -351,11 +393,11 @@ if __name__ == "__main__":
     # main()
 
     ml_params = {
-        "interval": "1h",
-        "forecast_horizon_hours": 1,
-        "n_epochs": 300,
-        "hidden_sizes": (128, 64, 32, 16),
-        "signal_percentiles": (2, 98),
+        "interval": "4h",
+        "forecast_horizon_hours": 4,
+        "n_epochs": 150,
+        "hidden_sizes": (256, 128, 64, 32),
+        "signal_percentiles": (10, 90),
         "train_ratio": 0.8,
         "val_ratio": 0.2,
         "early_stopping_patience": 10,
@@ -364,10 +406,14 @@ if __name__ == "__main__":
         "batch_size": 128,
         "random_seed": 42,
         #
-        "sma_windows": (5, 10, 20, 30),
-        "volatility_windows": (5, 10, 20),
-        "momentum_windows": (7, 14, 21, 30),
-        "rsi_windows": (7, 14, 21),
+        "sma_windows": (2, 5, 10, 20),
+        "volatility_windows": (2, 5, 10, 20),
+        "momentum_windows": (2, 5, 10, 20),
+        "rsi_windows": (2, 5, 10, 20),
+        # "sma_windows": (5, 10, 20, 30),
+        # "volatility_windows": (5, 10, 20, 30),
+        # "momentum_windows": (7, 14, 21, 30),
+        # "rsi_windows": (7, 14, 21, 30),        
     }
 
     tester = InSampleMCTester(
@@ -375,12 +421,12 @@ if __name__ == "__main__":
         end_date="2024-10-31",
         strategy_name="ml",
         asset="VETUSD",
-        timeframe="1h",
-        n_perm=30,
+        timeframe="4h",
+        n_perm=200,
         generate_plot=True,
         strategy_kwargs=ml_params,
         price_column="median",
         fee_bps=10.0,
-        slippage_bps=10.0,
+        slippage_bps=5.0,
     )
     tester.run(save_json_dir="reports/example_run")

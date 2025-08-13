@@ -15,6 +15,8 @@ import pandas as pd
 from tqdm import tqdm
 import json
 import os
+from concurrent.futures import ProcessPoolExecutor
+from itertools import repeat
 
 from permutations import get_permutation
 
@@ -30,6 +32,116 @@ def _profit_factor(returns: pd.Series) -> float:
     if negative_sum == 0:
         return float("inf") if positive_sum > 0 else 0.0
     return positive_sum / negative_sum
+
+
+# ---------------------------------------------------------------------- #
+# Helpers for parallel worker                                            #
+# ---------------------------------------------------------------------- #
+
+def _ensure_price_column_exists_oos(df: pd.DataFrame, price_column: str) -> pd.DataFrame:
+    if price_column in df.columns:
+        return df
+    df = df.copy()
+    col = price_column
+    if col == "median":
+        if all(c in df.columns for c in ["high", "low"]):
+            df[col] = (df["high"] + df["low"]) / 2
+            return df
+        raise KeyError("Cannot create 'median' column: missing 'high' or 'low'.")
+    if col == "typical":
+        if all(c in df.columns for c in ["high", "low", "close"]):
+            df[col] = (df["high"] + df["low"] + df["close"]) / 3
+            return df
+        raise KeyError("Cannot create 'typical' column: missing 'high', 'low' or 'close'.")
+    if col == "vwap":
+        required = ["high", "low", "close", "volume"]
+        if all(c in df.columns for c in required):
+            vwap_window = 20
+            typical_price = (df["high"] + df["low"] + df["close"]) / 3
+            tpv = typical_price * df["volume"]
+            cumulative_tpv = tpv.rolling(window=vwap_window, min_periods=1).sum()
+            cumulative_volume = df["volume"].rolling(window=vwap_window, min_periods=1).sum()
+            df[col] = (cumulative_tpv / cumulative_volume).fillna(method="ffill")
+            return df
+        raise KeyError("Cannot create 'vwap' column: missing one of 'high','low','close','volume'.")
+    raise KeyError(f"Price column '{price_column}' not found in DataFrame and cannot be derived.")
+
+
+def _walkforward_signals_oos(
+    ohlc: pd.DataFrame,
+    price_column: str,
+    strategy_name: str,
+    strategy_kwargs: dict,
+    train_lookback: int,
+    train_step: int,
+) -> np.ndarray:
+    n = len(ohlc)
+    wf_signals = np.full(n, np.nan)
+    strategy_cls: Type[BaseStrategy] = aVAILABLE_STRATEGIES[strategy_name]
+
+    for i in range(train_lookback, n, train_step):
+        train_start = i - train_lookback
+        train_end = i
+        train_df = ohlc.iloc[train_start:train_end]
+
+        strategy: BaseStrategy = strategy_cls(price_column=price_column, **strategy_kwargs)
+        _ = strategy.optimize(train_df)
+
+        oos_end = min(i + train_step, n)
+        long_lookback_ctx = train_lookback
+        signal_calc_start = max(0, train_end - long_lookback_ctx)
+        calc_df = ohlc.iloc[signal_calc_start:oos_end]
+        calc_df = _ensure_price_column_exists_oos(calc_df, price_column)
+        oos_signals_full = strategy.generate_signals(calc_df)
+        oos_section_len = len(ohlc.iloc[train_end:oos_end])
+        oos_signals_final = oos_signals_full.iloc[-oos_section_len:].values
+        wf_signals[train_end:oos_end] = oos_signals_final
+
+    return wf_signals
+
+
+def _compute_single_perm_pf_net_oos(
+    seed: int,
+    asset: str,
+    timeframe: str,
+    start_date: str,
+    end_date: str,
+    price_column: str,
+    strategy_name: str,
+    strategy_kwargs: dict,
+    fee_bps: float,
+    slippage_bps: float,
+    train_lookback: int,
+    train_step: int,
+    perm_start_index: int,
+) -> float:
+    full_fp = Path(f"data/ohlcv_{asset}_{timeframe}.parquet")
+    full_df = pd.read_parquet(full_fp)
+    from permutations import get_permutation  # local import for subprocess
+    perm_df = get_permutation(full_df, start_index=perm_start_index, seed=seed)
+    perm_df = perm_df[(perm_df.index >= start_date) & (perm_df.index < end_date)]
+    perm_df = _ensure_price_column_exists_oos(perm_df, price_column)
+
+    perm_signals = _walkforward_signals_oos(
+        perm_df,
+        price_column,
+        strategy_name,
+        strategy_kwargs,
+        train_lookback,
+        train_step,
+    )
+
+    perm_df["r"] = np.log(perm_df[price_column]).diff().shift(-1)
+    perm_df["simple_r"] = perm_df[price_column].pct_change().shift(-1)
+    perm_df["signal"] = perm_signals
+    perm_df["strategy_r"] = perm_df["r"] * perm_df["signal"]
+    perm_df["strategy_simple_r"] = perm_df["simple_r"] * perm_df["signal"]
+    fee_rate = (fee_bps + slippage_bps) / 10000.0
+    turnover = (perm_df["signal"].diff().abs()).fillna(perm_df["signal"].abs())
+    perm_df["cost_simple"] = fee_rate * turnover
+    perm_df["strategy_simple_r_net"] = perm_df["strategy_simple_r"] - perm_df["cost_simple"]
+    perm_df["strategy_r_net"] = np.log((1.0 + perm_df["strategy_simple_r_net"]).clip(lower=1e-12))
+    return _profit_factor(perm_df["strategy_r_net"].dropna())
 
 
 # ---------------------------------------------------------------------- #
@@ -176,6 +288,30 @@ class WalkForwardMCTester:
         return wf_signals
 
     # ------------------------------------------------------------------ #
+    # Parallel worker                                                    #
+    # ------------------------------------------------------------------ #
+
+    def _compute_single_perm_pf_net(self, seed: int) -> float:
+        full_df = self._load_raw()
+        from permutations import get_permutation  # local import for subprocess safety
+        perm_df = get_permutation(full_df, start_index=self.perm_start_index, seed=seed)
+        perm_df = perm_df[(perm_df.index >= self.start_date) & (perm_df.index < self.end_date)]
+        perm_df = self._ensure_price_column_exists(perm_df)
+
+        perm_signals = self._walkforward_signals(perm_df)
+        perm_df["r"] = np.log(perm_df[self.price_column]).diff().shift(-1)
+        perm_df["simple_r"] = perm_df[self.price_column].pct_change().shift(-1)
+        perm_df["signal"] = perm_signals
+        perm_df["strategy_r"] = perm_df["r"] * perm_df["signal"]
+        perm_df["strategy_simple_r"] = perm_df["simple_r"] * perm_df["signal"]
+        fee_rate = (self.fee_bps + self.slippage_bps) / 10000.0
+        turnover = (perm_df["signal"].diff().abs()).fillna(perm_df["signal"].abs())
+        perm_df["cost_simple"] = fee_rate * turnover
+        perm_df["strategy_simple_r_net"] = perm_df["strategy_simple_r"] - perm_df["cost_simple"]
+        perm_df["strategy_r_net"] = np.log((1.0 + perm_df["strategy_simple_r_net"]).clip(lower=1e-12))
+        return _profit_factor(perm_df["strategy_r_net"].dropna())
+
+    # ------------------------------------------------------------------ #
     # Plot OOS walk-forward                                            #
     # ------------------------------------------------------------------ #
 
@@ -251,30 +387,31 @@ class WalkForwardMCTester:
         real_pf_net = _profit_factor(real_df["strategy_r_net"].dropna())
         print(f"OOS real Profit Factor: {real_pf:.4f}")
 
-        iperms_better = 0
-        permuted_pfs_net: list[float] = []
-        print("Starting OOS MC permutations …")
-        for perm_i in tqdm(range(self.n_perm)):
-            perm_df = self._get_perm_df_with_seed(perm_i)
-            perm_df = self._ensure_price_column_exists(perm_df)
-            perm_signals = self._walkforward_signals(perm_df)
-            perm_df["r"] = np.log(perm_df[self.price_column]).diff().shift(-1)
-            perm_df["simple_r"] = perm_df[self.price_column].pct_change().shift(-1)
-            perm_df["signal"] = perm_signals
-            perm_df["strategy_r"] = perm_df["r"] * perm_df["signal"]
-            perm_df["strategy_simple_r"] = perm_df["simple_r"] * perm_df["signal"]
-            # Costs
-            fee_rate = (self.fee_bps + self.slippage_bps) / 10000.0
-            turnover = (perm_df["signal"].diff().abs()).fillna(perm_df["signal"].abs())
-            perm_df["cost_simple"] = fee_rate * turnover
-            perm_df["strategy_simple_r_net"] = perm_df["strategy_simple_r"] - perm_df["cost_simple"]
-            perm_df["strategy_r_net"] = np.log((1.0 + perm_df["strategy_simple_r_net"]).clip(lower=1e-12))
-            perm_pf_net = _profit_factor(perm_df["strategy_r_net"].dropna())
-
-            if perm_pf_net >= real_pf_net:
-                iperms_better += 1
-            permuted_pfs_net.append(perm_pf_net)
-            print(f"Permutation {perm_i}: Net PF={perm_pf_net:.4f}")
+        print("Starting OOS MC permutations (parallel)…")
+        seeds = list(range(self.n_perm))
+        with ProcessPoolExecutor() as executor:
+            permuted_pfs_net = list(
+                tqdm(
+                    executor.map(
+                        _compute_single_perm_pf_net_oos,
+                        seeds,
+                        repeat(self.asset),
+                        repeat(self.timeframe),
+                        repeat(self.start_date),
+                        repeat(self.end_date),
+                        repeat(self.price_column),
+                        repeat(self.strategy_name),
+                        repeat(self.strategy_kwargs),
+                        repeat(self.fee_bps),
+                        repeat(self.slippage_bps),
+                        repeat(self.train_lookback),
+                        repeat(self.train_step),
+                        repeat(self.perm_start_index),
+                    ),
+                    total=len(seeds),
+                )
+            )
+        iperms_better = sum(1 for pf in permuted_pfs_net if pf >= real_pf_net)
 
         p_val = (iperms_better + 1) / (self.n_perm + 1)
         print("=" * 100)
@@ -292,7 +429,7 @@ class WalkForwardMCTester:
             plt.axvline(real_pf_net, color="red", linewidth=2, label=f"Real Net (PF={real_pf_net:.2f})")
             plt.xlabel("Profit Factor")
             plt.ylabel("Frequency")
-            plt.title(f"Walk-Forward OOS MC Permutations (net PF, p={p_val:.3f})")
+            plt.title(f"Walk-Forward OOS MC Permutations (net PF, p={p_val:.3f}, N={self.n_perm})")
             plt.legend()
             plt.grid(True, alpha=0.3)
             plt.show()

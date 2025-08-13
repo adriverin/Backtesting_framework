@@ -205,6 +205,7 @@ def plot_cumulative_returns(
     # Fees/slippage model (per-side bps applied on position changes)
     fee_rate = (fee_bps + slippage_bps) / 10000.0
     turnover = (df["signal"].diff().abs()).fillna(df["signal"].abs())
+    df["turnover"] = turnover
     df["cost_simple"] = fee_rate * turnover
     # Net simple return after fees
     df["strategy_simple_r_net"] = df["strategy_simple_r"] - df["cost_simple"]
@@ -237,6 +238,35 @@ def plot_cumulative_returns(
     pct_return_simple_gross = strat_cum_simple_gross.iloc[-1] * 100
     pct_return_simple_net = strat_cum_simple_net.iloc[-1] * 100
 
+    # Risk metrics (per-bar, on net simple return stream)
+    net_simple = df["strategy_simple_r_net"].dropna().values
+    if len(net_simple) > 0:
+        q05 = float(np.quantile(net_simple, 0.05))
+        var95_simple_net_pct = float(-q05 * 100.0)
+        cvar95_simple_net_pct = float(-np.mean(net_simple[net_simple <= q05]) * 100.0)
+    else:
+        var95_simple_net_pct = float("nan")
+        cvar95_simple_net_pct = float("nan")
+
+    # Diagnostics for costs/turnover
+    # Estimate bars per day from timeframe
+    tf = timeframe.lower().strip()
+    if tf.endswith("m"):
+        bar_hours = int(tf[:-1]) / 60.0
+    elif tf.endswith("h"):
+        bar_hours = float(int(tf[:-1]))
+    elif tf.endswith("d"):
+        bar_hours = float(int(tf[:-1]) * 24)
+    else:
+        bar_hours = 1.0
+    bars_per_day = max(1.0, 24.0 / bar_hours)
+    avg_turnover_per_bar = float(df["turnover"].mean()) if len(df) else 0.0
+    avg_turnover_per_day = avg_turnover_per_bar * bars_per_day
+    total_cost_simple = float(df["cost_simple"].sum())
+    total_turnover = float(df["turnover"].sum())
+    breakeven_fee_rate = float(df["strategy_simple_r"].sum() / total_turnover) if total_turnover > 0 else float("nan")
+    breakeven_fee_bps = breakeven_fee_rate * 10000.0
+
     print("=" * 80)
     print(f"Results for strategy '{strategy_name}' on {asset} {timeframe}")
     print(f"Period: {start_date} -> {end_date} | Observations: {len(df)}")
@@ -250,6 +280,10 @@ def plot_cumulative_returns(
     print(f"Net    Sharpe (log)  : {sharpe_net:.4f}")
     print(f"Net    % Log Return  : {pct_return_log_net:.2f}%")
     print(f"Net    % Simple Ret  : {pct_return_simple_net:.2f}%")
+    print("-")
+    print(f"Diagnostics: avg turnover/bar={avg_turnover_per_bar:.3f}, ~turnover/day={avg_turnover_per_day:.3f}")
+    print(f"Diagnostics: total fees (simple)={total_cost_simple:.6f} | breakeven fee per-side ≈ {breakeven_fee_bps:.2f} bps")
+    print(f"Diagnostics: VaR95 (net, per-bar) ≈ {var95_simple_net_pct:.2f}% | CVaR95 ≈ {cvar95_simple_net_pct:.2f}%")
     print("-")
     print(f"Asset  % Log Return  : {pct_return_asset_log:.2f}%")
     print(f"Asset  % Simple Ret  : {pct_return_asset_simple:.2f}%")
@@ -328,6 +362,7 @@ def plot_cumulative_returns(
         equity_net = (1.0 + df["strategy_simple_r_net"]).cumprod()
         dd_gross = equity_gross / equity_gross.cummax() - 1.0
         dd_net = equity_net / equity_net.cummax() - 1.0
+        avg_net_dd = float(dd_net.mean()) if len(dd_net) else 0.0
 
         # Equity series (start at 1, min at 0)
         asset_equity = (1.0 + df["simple_r"]).cumprod()
@@ -357,6 +392,13 @@ def plot_cumulative_returns(
                 "pct_return_asset_simple": pct_return_asset_simple,
                 "pct_return_simple_gross": pct_return_simple_gross,
                 "pct_return_simple_net": pct_return_simple_net,
+                "avg_turnover_per_bar": avg_turnover_per_bar,
+                "avg_turnover_per_day": avg_turnover_per_day,
+                "total_cost_simple": total_cost_simple,
+                "breakeven_fee_bps_per_side": breakeven_fee_bps,
+                "avg_net_drawdown_pct": avg_net_dd * 100.0,
+                "var95_net_pct": var95_simple_net_pct,
+                "cvar95_net_pct": cvar95_simple_net_pct,
             },
             "series": {
                 "timestamps": [ts.isoformat() for ts in df.index.to_pydatetime()],
@@ -388,6 +430,7 @@ def plot_cumulative_returns(
                         "rolling_sharpe": rolling_sharpe_net.fillna(method="bfill").fillna(0).tolist(),
                     },
                 },
+                "turnover": df["turnover"].fillna(0).tolist(),
             },
         }
 
@@ -432,11 +475,11 @@ if __name__ == "__main__":
     # main()
 
     ml_params = {
-        "interval": "1h",
-        "forecast_horizon_hours": 1,
-        "n_epochs": 300,
-        "hidden_sizes": (128, 64, 32, 16),
-        "signal_percentiles": (2, 98),
+        "interval": "4h",
+        "forecast_horizon_hours": 4,
+        "n_epochs": 150,
+        "hidden_sizes": (256, 128, 64, 32),
+        "signal_percentiles": (10, 90),
         "train_ratio": 0.8,
         "val_ratio": 0.2,
         "early_stopping_patience": 10,
@@ -445,10 +488,14 @@ if __name__ == "__main__":
         "batch_size": 128,
         "random_seed": 42,
         #
-        "sma_windows": (5, 10, 20, 30),
-        "volatility_windows": (5, 10, 20),
-        "momentum_windows": (7, 14, 21, 30),
-        "rsi_windows": (7, 14, 21),
+        "sma_windows": (2, 5, 10, 20),
+        "volatility_windows": (2, 5, 10, 20),
+        "momentum_windows": (2, 5, 10, 20),
+        "rsi_windows": (2, 5, 10, 20),
+        # "sma_windows": (5, 10, 20, 30),
+        # "volatility_windows": (5, 10, 20, 30),
+        # "momentum_windows": (7, 14, 21, 30),
+        # "rsi_windows": (7, 14, 21, 30),        
     }
 
 
@@ -458,11 +505,11 @@ if __name__ == "__main__":
         # strategy_name="ma",
         strategy_name="ml",
         asset="VETUSD",
-        timeframe="1h",
-        show_plot=True,
+        timeframe="4h",
+        show_plot=False,
         strategy_kwargs=ml_params,
         price_column="median",
         fee_bps=10.0,
-        slippage_bps=10.0,
+        slippage_bps=5.0,
         save_json_dir="reports/example_run",
     )

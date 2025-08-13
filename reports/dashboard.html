@@ -53,6 +53,8 @@
     .kpi .value .unit { font-size: 12px; color: var(--muted); margin-left: 6px; font-weight: 600; }
     .kpi.good .value { color: var(--accent-2); }
     .kpi.bad .value { color: #f27777; }
+    /* Ensure Plotly charts expand to container width */
+    .js-plotly-plot, .plot-container, .plotly { width: 100% !important; }
   </style>
 </head>
 <body>
@@ -62,6 +64,8 @@
       <label for="folderInput" style="color: var(--muted); font-weight:600;">Data folder</label>
       <input id="folderInput" type="text" value="example_run" style="width: 320px" />
       <button onclick="loadAll()">Load</button>
+      <label for="turnoverMaInput" style="color: var(--muted); font-weight:600; margin-left:12px;">Turnover MA</label>
+      <input id="turnoverMaInput" type="number" value="100" min="1" style="width: 90px" />
     </div>
 
     <div class="tabs">
@@ -78,6 +82,7 @@
           <div class="box"><h2>Cumulative Log Returns</h2><div id="is_cum_log"></div></div>
           <div class="box"><h2>Cumulative Simple Returns <button id="toggle_cum_simple" class="mini-btn">Log scale</button></h2><div id="is_cum_simple"></div></div>
           <div class="box"><h2>Underwater (Drawdown)</h2><div id="is_dd"></div></div>
+          <div class="box"><h2>Turnover</h2><div id="is_turnover"></div></div>
         </div>
         <div class="row">
           <div class="box"><h2>Rolling Sharpe</h2><div id="is_rolling_sharpe"></div></div>
@@ -87,7 +92,7 @@
           <div class="box"><h2>Bar Returns Histogram</h2><div id="is_bar_hist"></div></div>
           <div class="box"><h2>Run Metrics</h2><div id="is_metrics"></div></div>
         </div>
-        <div class="row">
+        <div class="col">
           <div class="box"><h2>Run Parameters</h2><div id="is_params"></div></div>
         </div>
       </div>
@@ -95,9 +100,8 @@
 
     <div id="is_mc" class="panel">
     <div class="grid">
-      <div class="row">
+      <div class="col">
         <div class="box"><h2>Permutation PF (Net) Histogram</h2><div id="is_mc_hist"></div></div>
-        <div class="box"><h2>IS Gross vs Net (Log)</h2><div id="is_mc_ts"></div></div>
       </div>
       <div class="row">
         <div class="box"><h2>Run Metrics</h2><div id="is_mc_metrics"></div></div>
@@ -144,8 +148,10 @@
     });
 
     async function safeFetch(path) {
+      // Cache-buster to always fetch the latest JSON
+      const url = `${path}?t=${Date.now()}`;
       try {
-        const res = await fetch(path);
+        const res = await fetch(url, { cache: 'no-store' });
         if (!res.ok) return null;
         return await res.json();
       } catch (_) {
@@ -156,7 +162,19 @@
     function makeTable(containerId, obj) {
       const el = document.getElementById(containerId);
       if (!obj) { el.innerHTML = '<i>No data</i>'; return; }
-      const rows = Object.entries(obj).map(([k, v]) => `<tr><th>${k}</th><td>${typeof v === 'object' ? JSON.stringify(v) : v}</td></tr>`).join('');
+      const formatVal = (v) => {
+        if (v === null || v === undefined) return '-';
+        const num = Number(v);
+        if (Number.isFinite(num)) {
+          // fewer decimals for readability
+          if (Math.abs(num) >= 1000) return num.toFixed(0);
+          if (Math.abs(num) >= 100) return num.toFixed(1);
+          if (Math.abs(num) >= 1) return num.toFixed(2);
+          return num.toFixed(4);
+        }
+        return typeof v === 'object' ? JSON.stringify(v) : String(v);
+      };
+      const rows = Object.entries(obj).map(([k, v]) => `<tr><th>${k}</th><td>${formatVal(v)}</td></tr>`).join('');
       el.innerHTML = `<table>${rows}</table>`;
     }
 
@@ -179,6 +197,10 @@
         { label: 'Net Log Ret', value: p(metrics.pct_return_log_net), good: Number(metrics.pct_return_log_net) >= 0 },
         { label: 'Gross Simple Ret', value: p(metrics.pct_return_simple_gross), good: Number(metrics.pct_return_simple_gross) >= 0 },
         { label: 'Net Simple Ret', value: p(metrics.pct_return_simple_net), good: Number(metrics.pct_return_simple_net) >= 0 },
+        { label: 'Avg Turnover/day', value: fmt(metrics.avg_turnover_per_day, 2), good: true },
+        { label: 'Avg Net DD', value: p(metrics.avg_net_drawdown_pct), good: Number(metrics.avg_net_drawdown_pct) >= -10 },
+        { label: 'VaR 95 (net, per-bar)', value: p(metrics.var95_net_pct), good: Number(metrics.var95_net_pct) >= -1 },
+        { label: 'CVaR 95 (net, per-bar)', value: p(metrics.cvar95_net_pct), good: Number(metrics.cvar95_net_pct) >= -1 },
       ];
       el.innerHTML = items.map(it => `<div class="kpi ${it.good ? 'good' : 'bad'}"><div class="label">${it.label}</div><div class="value">${it.value}</div></div>`).join('');
     }
@@ -260,10 +282,18 @@
       cumEl._equityNet = equityNet;
       cumEl._equityAsset = equityAsset;
 
-      Plotly.newPlot('is_dd', [
-        { x: ts, y: stratGross.drawdown, mode: 'lines', name: 'Gross DD' },
-        { x: ts, y: stratNet.drawdown, mode: 'lines', name: 'Net DD' },
-      ], { template: 'plotly_dark', height: 460, margin: { t: 30 }, xaxis: { title: 'Time' }, yaxis: { title: 'Drawdown' } });
+      const avgNetDDPct = Number(m.avg_net_drawdown_pct);
+      const avgNetDD = Number.isFinite(avgNetDDPct) ? avgNetDDPct / 100.0 : null;
+      const ddTraces = [
+        { x: ts, y: stratGross.drawdown, mode: 'lines', name: 'Gross DD', line: { color: '#5b8cff' }, fill: 'tozeroy', fillcolor: 'rgba(91,140,255,0.18)' },
+        { x: ts, y: stratNet.drawdown, mode: 'lines', name: 'Net DD', line: { color: '#ff9f43' }, fill: 'tozeroy', fillcolor: 'rgba(255,159,67,0.18)' },
+      ];
+      const ddLayout = { template: 'plotly_dark', height: 460, margin: { t: 30 }, xaxis: { title: 'Time' }, yaxis: { title: 'Drawdown' } };
+      if (avgNetDD !== null) {
+        ddLayout.shapes = [ { type: 'line', x0: ts[0], x1: ts[ts.length-1], y0: avgNetDD, y1: avgNetDD, xref: 'x', yref: 'y', line: { color: '#ff9f43', width: 2, dash: 'dot' } } ];
+        ddLayout.annotations = [ { x: ts[ts.length-1], y: avgNetDD, xref: 'x', yref: 'y', xanchor: 'right', yanchor: 'bottom', showarrow: false, text: `Avg Net DD: ${avgNetDDPct.toFixed(2)}%`, font: { size: 12, color: '#ff9f43' }, bgcolor: 'rgba(17,17,17,0.6)', bordercolor: '#333', borderwidth: 1 } ];
+      }
+      Plotly.newPlot('is_dd', ddTraces, ddLayout);
 
       Plotly.newPlot('is_rolling_sharpe', [
         { x: ts, y: stratGross.rolling_sharpe, mode: 'lines', name: 'Gross' },
@@ -293,6 +323,32 @@
       makeTable('is_metrics', data.metrics);
       makeTable('is_params', data.params);
       renderKpis('is_kpis', data.metrics);
+
+      // Turnover plot
+      function movingAvg(arr, n) {
+        const out = new Array(arr.length).fill(null);
+        let sum = 0;
+        for (let i = 0; i < arr.length; i++) {
+          const v = Number(arr[i]);
+          sum += Number.isFinite(v) ? v : 0;
+          if (i >= n) {
+            const drop = Number(arr[i - n]);
+            sum -= Number.isFinite(drop) ? drop : 0;
+          }
+          if (i >= n - 1) out[i] = sum / n;
+        }
+        return out;
+      }
+      const turnover = (data.series && data.series.turnover) || [];
+      let maNInput = parseInt((document.getElementById('turnoverMaInput') && document.getElementById('turnoverMaInput').value) || '0', 10);
+      if (!Number.isFinite(maNInput) || maNInput <= 0) {
+        maNInput = Math.max(50, Math.floor(turnover.length * 0.02));
+      }
+      const turnoverMA = movingAvg(turnover, maNInput);
+      Plotly.newPlot('is_turnover', [
+        { x: ts, y: turnover, mode: 'lines', name: 'Turnover (per bar)', line: { color: '#888', width: 1 }, opacity: 0.6 },
+        { x: ts, y: turnoverMA, mode: 'lines', name: `Turnover MA(${maNInput})`, line: { color: '#5b8cff', width: 2 } },
+      ], { template: 'plotly_dark', height: 360, margin: { t: 30 }, xaxis: { title: 'Time' }, yaxis: { title: 'Turnover' } });
 
       // Toggle button for log/linear scale on cumulative simple returns
       const toggleBtn = document.getElementById('toggle_cum_simple');
@@ -326,17 +382,45 @@
       const has = !!data;
       ensurePanelHasData('is_mc', has);
       if (!has) return;
-      Plotly.newPlot('is_mc_hist', [
-        { x: data.series.permutation_pfs_net, type: 'histogram', name: 'Perm Net PF', hovertemplate: 'PF: %{x:.3f}<br>Count: %{y}<extra></extra>' },
-      ], { template: 'plotly_dark', height: 360, margin: { t: 30 }, xaxis: { title: 'Net Profit Factor (Permutation)' }, yaxis: { title: 'Count' } });
-      if (data.series.timestamps) {
-        Plotly.newPlot('is_mc_ts', [
-          { x: data.series.timestamps, y: data.series.strategy.gross.cum_log, mode: 'lines', name: 'Gross' },
-          { x: data.series.timestamps, y: data.series.strategy.net.cum_log, mode: 'lines', name: 'Net' },
-        ], { template: 'plotly_dark', height: 360, margin: { t: 30 }, xaxis: { title: 'Time' }, yaxis: { title: 'Cumulative log return' } });
-      }
+      // Render tables first so they show even if chart errors
       makeTable('is_mc_metrics', data.metrics);
       makeTable('is_mc_params', data.params);
+
+      const pfNet = data.metrics && Number.isFinite(Number(data.metrics.pf_net)) ? Number(data.metrics.pf_net) : null;
+      const pVal = data.metrics && Number.isFinite(Number(data.metrics.p_value_net)) ? Number(data.metrics.p_value_net) : null;
+      const nPerm = (data.params && Number.isFinite(Number(data.params.n_perm)) ? Number(data.params.n_perm) : null);
+      const legendName = (pfNet !== null && pVal !== null) ? `Real (net) PF = ${pfNet.toFixed(3)} | p = ${pVal.toFixed(3)}` : 'Real (net) PF';
+
+      const series = (data && data.series) || {};
+      const perms = toFinite(series.permutation_pfs_net || []);
+      const bins = Math.max(12, Math.floor(perms.length / 4));
+      const histTrace = {
+        x: perms,
+        type: 'histogram',
+        name: 'Perm Net PF',
+        marker: { color: 'rgba(91,140,255,0.75)', line: { color: 'rgba(255,255,255,0.15)', width: 1 } },
+        opacity: 0.95,
+        nbinsx: bins,
+        hovertemplate: 'PF: %{x:.3f}<br>Count: %{y}<extra></extra>'
+      };
+      const traces = [histTrace];
+      if (pfNet !== null) {
+        traces.push({ x: [pfNet, pfNet], y: [0, 1], mode: 'lines', name: legendName, line: { color: '#ff6b6b', width: 2 }, visible: 'legendonly' });
+      }
+      const layout = {
+        template: 'plotly_dark', height: 380, margin: { t: 30, r: 10, l: 50, b: 40 },
+        xaxis: { title: 'Net Profit Factor (Permutation)', gridcolor: '#2a2a36' },
+        yaxis: { title: 'Count', gridcolor: '#2a2a36' },
+        bargap: 0.05,
+      };
+      const N = nPerm !== null ? nPerm : perms.length;
+      layout.title = `IS Permutations (Net PF, p=${pVal !== null ? pVal.toFixed(3) : '?'}, N=${N})`;
+      if (pfNet !== null) {
+        layout.shapes = [ { type: 'line', x0: pfNet, x1: pfNet, y0: 0, y1: 1, xref: 'x', yref: 'paper', line: { color: '#ff6b6b', width: 2 } } ];
+        layout.annotations = [ { x: pfNet, y: 1, xref: 'x', yref: 'paper', yanchor: 'bottom', showarrow: false, text: legendName, font: { size: 12, color: '#ff9b9b' }, bgcolor: 'rgba(17,17,17,0.6)', bordercolor: '#333', borderwidth: 1, align: 'left' } ];
+      }
+      renderResponsivePlot('is_mc_hist', traces, layout);
+      setupResize('is_mc_hist');
     }
 
     function plotOOSWF(data) {
@@ -365,11 +449,72 @@
       const has = !!data;
       ensurePanelHasData('oos_wf_mc', has);
       if (!has) return;
-      Plotly.newPlot('oos_wf_mc_hist', [
-        { x: data.series.permutation_pfs_net, type: 'histogram', name: 'Perm Net PF', hovertemplate: 'PF: %{x:.3f}<br>Count: %{y}<extra></extra>' },
-      ], { template: 'plotly_dark', height: 360, margin: { t: 30 }, xaxis: { title: 'Net Profit Factor (Permutation)' }, yaxis: { title: 'Count' } });
+      const pfNet = data.metrics && Number.isFinite(Number(data.metrics.pf_net)) ? Number(data.metrics.pf_net) : null;
+      const pVal = data.metrics && Number.isFinite(Number(data.metrics.p_value_net)) ? Number(data.metrics.p_value_net) : null;
+      const legendName = (pfNet !== null && pVal !== null) ? `Real (net) PF = ${pfNet.toFixed(3)} | p = ${pVal.toFixed(3)}` : 'Real (net) PF';
+
+      const perms = toFinite((data.series && data.series.permutation_pfs_net) || []);
+      const nPerm = (data.params && Number.isFinite(Number(data.params.n_perm)) ? Number(data.params.n_perm) : null);
+      const bins = Math.max(12, Math.floor(perms.length / 4));
+      const histTrace = {
+        x: perms,
+        type: 'histogram',
+        name: 'Perm Net PF',
+        marker: { color: 'rgba(91,140,255,0.75)', line: { color: 'rgba(255,255,255,0.15)', width: 1 } },
+        opacity: 0.95,
+        nbinsx: bins,
+        hovertemplate: 'PF: %{x:.3f}<br>Count: %{y}<extra></extra>'
+      };
+      const traces = [histTrace];
+      if (pfNet !== null) {
+        traces.push({ x: [pfNet, pfNet], y: [0, 1], mode: 'lines', name: legendName, line: { color: '#ff6b6b', width: 2 }, visible: 'legendonly' });
+      }
+      const layout = {
+        template: 'plotly_dark', height: 380, margin: { t: 30, r: 10, l: 50, b: 40 },
+        xaxis: { title: 'Net Profit Factor (Permutation)', gridcolor: '#2a2a36' },
+        yaxis: { title: 'Count', gridcolor: '#2a2a36' },
+        bargap: 0.05,
+      };
+      const N = nPerm !== null ? nPerm : perms.length;
+      layout.title = `OOS WF Permutations (Net PF, p=${pVal !== null ? pVal.toFixed(3) : '?'}, N=${N})`;
+      if (pfNet !== null) {
+        layout.shapes = [ { type: 'line', x0: pfNet, x1: pfNet, y0: 0, y1: 1, xref: 'x', yref: 'paper', line: { color: '#ff6b6b', width: 2 } } ];
+        layout.annotations = [ { x: pfNet, y: 1, xref: 'x', yref: 'paper', yanchor: 'bottom', showarrow: false, text: legendName, font: { size: 12, color: '#ff9b9b' }, bgcolor: 'rgba(17,17,17,0.6)', bordercolor: '#333', borderwidth: 1, align: 'left' } ];
+      }
+      renderResponsivePlot('oos_wf_mc_hist', traces, layout);
+      setupResize('oos_wf_mc_hist');
       makeTable('oos_wf_mc_metrics', data.metrics);
       makeTable('oos_wf_mc_params', data.params);
+    }
+
+    // -------- Responsive plot helpers --------
+    function computePlotHeight(divId) {
+      const el = document.getElementById(divId);
+      const w = el ? el.clientWidth : 800;
+      return Math.max(360, Math.min(600, Math.round(w * 0.50)));
+    }
+    function computePlotWidth(divId) {
+      const el = document.getElementById(divId);
+      return el ? el.clientWidth : 900;
+    }
+    function renderResponsivePlot(divId, traces, layout) {
+      const h = computePlotHeight(divId);
+      const w = computePlotWidth(divId);
+      const ly = Object.assign({}, layout, { height: h, width: w, autosize: false });
+      const el = document.getElementById(divId);
+      if (el) el.style.width = '100%';
+      Plotly.newPlot(divId, traces, ly, { responsive: true, displayModeBar: true });
+    }
+    function setupResize(divId) {
+      if (!window._plotResizers) window._plotResizers = new Set();
+      if (window._plotResizers.has(divId)) return;
+      window._plotResizers.add(divId);
+      window.addEventListener('resize', () => {
+        const h = computePlotHeight(divId);
+        const w = computePlotWidth(divId);
+        Plotly.relayout(divId, { height: h, width: w });
+        Plotly.Plots.resize(divId);
+      });
     }
 
     async function loadAll() {
