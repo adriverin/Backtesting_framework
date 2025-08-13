@@ -101,9 +101,10 @@ def _ensure_price_column_exists(df: pd.DataFrame, price_column: str) -> pd.DataF
     """Ensure the requested price column exists, creating common derived ones if needed.
 
     Supports:
-    - 'median'   = (high + low) / 2
-    - 'typical'  = (high + low + close) / 3
-    - 'vwap'     = rolling VWAP over 20 bars (if volume available)
+    - 'median'     = (high + low) / 2
+    - 'typical'    = (high + low + close) / 3
+    - 'vwap'       = rolling VWAP over 20 bars (if volume available)
+    - 'vwap_N'     = rolling VWAP over N bars (e.g. 'vwap_50', 'vwap50')
     """
     if price_column in df.columns:
         return df
@@ -125,16 +126,24 @@ def _ensure_price_column_exists(df: pd.DataFrame, price_column: str) -> pd.DataF
             return df
         raise KeyError("Cannot create 'typical' column: missing 'high', 'low' or 'close'.")
 
-    if col == "vwap":
+    # VWAP with optional custom window via names like 'vwap', 'vwap_50', or 'vwap50'
+    if col.startswith("vwap"):
         required = ["high", "low", "close", "volume"]
         if all(c in df.columns for c in required):
-            vwap_window = 20
+            # Parse optional window suffix
+            suffix = col[4:]
+            if suffix.startswith("_") or suffix.startswith("-"):
+                suffix = suffix[1:]
+            if suffix.isdigit() and len(suffix) > 0:
+                vwap_window = int(suffix)
+            else:
+                vwap_window = 20
             typical_price = (df["high"] + df["low"] + df["close"]) / 3
             tpv = typical_price * df["volume"]
             cumulative_tpv = tpv.rolling(window=vwap_window, min_periods=1).sum()
             cumulative_volume = df["volume"].rolling(window=vwap_window, min_periods=1).sum()
             df[col] = (cumulative_tpv / cumulative_volume).fillna(method="ffill")
-            print(f"--- Created rolling 'vwap' ({vwap_window}-bar) column on-the-fly. ---")
+            print(f"--- Created rolling '{col}' ({vwap_window}-bar) column on-the-fly. ---")
             return df
         raise KeyError("Cannot create 'vwap' column: missing one of 'high','low','close','volume'.")
 
@@ -514,10 +523,10 @@ ml_params = {
     "random_seed": 42,
     "hold_until_opposite": True,
     #
-    "sma_windows": (4, 8, 16, 32),
-    "volatility_windows": (4, 8, 16, 32),
-    "momentum_windows": (4, 8, 16, 32, 64),
-    "rsi_windows": (4, 8, 16, 32, 64),
+    "sma_windows": (4, 8, 16),
+    "volatility_windows": (4, 8, 16),
+    "momentum_windows": (4, 8, 16),
+    "rsi_windows": (4, 8, 16),
     # "sma_windows": (5, 10, 20, 30),
     # "volatility_windows": (5, 10, 20, 30),
     # "momentum_windows": (7, 14, 21, 30),
