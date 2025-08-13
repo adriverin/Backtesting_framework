@@ -7,3 +7,7 @@ The plotting should be using plotly and we should show:
 4. rolling sharpe ratio
 5. a table with all the important values 
 6. a table with the parameters used for the run
+
+
+
+we need a new file that runs @is_results.py many times in order to plot a heatmap of the net profit factor versus the changed parameter or parameters
