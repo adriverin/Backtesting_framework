@@ -35,7 +35,12 @@ class MLStrategy(BaseStrategy):
         if 'timeframe' in config_params:
             del config_params['timeframe']
 
-        # 4. Now, create the MLConfig object safely.
+        # 4. Remove non-MLConfig flags before constructing MLConfig
+        #    (keep them on the strategy instance only)
+        if 'hold_until_opposite' in config_params:
+            config_params.pop('hold_until_opposite', None)
+
+        # 5. Now, create the MLConfig object safely.
         # 'price_column' is passed explicitly, and the prepared params are unpacked.
         self.config = MLConfig(price_column=price_column, **config_params)
 
@@ -47,6 +52,10 @@ class MLStrategy(BaseStrategy):
         self.feature_engineer: FeatureEngineer | None = None
         self.quantile_edges: np.ndarray | None = None
         self.signal_thresholds: tuple[float, float] | None = None
+
+        # Whether to carry positions across 0s (hold until explicit opposite)
+        # Default preserves previous behaviour (no hold across 0s)
+        self.hold_until_opposite: bool = bool(self.extra_params.get("hold_until_opposite", False))
 
     def _ensure_price_column(self, df: pd.DataFrame) -> pd.DataFrame:
         """Checks for and creates calculated price columns if needed."""
@@ -178,7 +187,11 @@ class MLStrategy(BaseStrategy):
         # 3. Return as a pandas Series with the correct index
         signals = pd.Series(np.nan, index=ohlc.index)
         signals.loc[df_features.index] = signals_array
-        signals = signals.fillna(0) 
+        signals = signals.fillna(0)
+
+        # Optionally hold positions: carry last non-zero signal across zeros
+        if self.hold_until_opposite:
+            signals = signals.replace(0, np.nan).ffill().fillna(0)
 
         return signals
 

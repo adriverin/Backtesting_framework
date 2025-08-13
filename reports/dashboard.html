@@ -64,8 +64,10 @@
       <label for="folderInput" style="color: var(--muted); font-weight:600;">Data folder</label>
       <input id="folderInput" type="text" value="example_run" style="width: 320px" />
       <button onclick="loadAll()">Load</button>
-      <label for="turnoverMaInput" style="color: var(--muted); font-weight:600; margin-left:12px;">Turnover MA</label>
-      <input id="turnoverMaInput" type="number" value="100" min="1" style="width: 90px" />
+      <label for="turnoverMaInput" style="color: var(--muted); font-weight:600; margin-left:12px;">Turnover MA (days)</label>
+      <input id="turnoverMaInput" type="number" value="30" min="1" style="width: 90px" />
+      <label for="rollingSharpeDaysInput" style="color: var(--muted); font-weight:600; margin-left:12px;">Sharpe (days)</label>
+      <input id="rollingSharpeDaysInput" type="number" value="30" min="1" style="width: 90px" />
     </div>
 
     <div class="tabs">
@@ -241,6 +243,35 @@
     function clampPositive(arr, eps = 1e-9) {
       return (arr || []).map(v => (v <= 0 || !Number.isFinite(v) ? eps : v));
     }
+    function barsPerDayFromTimeframe(tf) {
+      if (!tf || typeof tf !== 'string') return 24.0;
+      const t = tf.toLowerCase().trim();
+      if (t.endsWith('m')) {
+        const minutes = Number.parseInt(t.slice(0, -1), 10);
+        const minutesPerBar = Number.isFinite(minutes) && minutes > 0 ? minutes : 60;
+        return (24 * 60) / minutesPerBar;
+      }
+      if (t.endsWith('h')) {
+        const hours = Number.parseInt(t.slice(0, -1), 10);
+        const hoursPerBar = Number.isFinite(hours) && hours > 0 ? hours : 1;
+        return 24 / hoursPerBar;
+      }
+      if (t.endsWith('d')) {
+        const days = Number.parseInt(t.slice(0, -1), 10);
+        const daysPerBar = Number.isFinite(days) && days > 0 ? days : 1;
+        return 1 / daysPerBar;
+      }
+      return 24.0;
+    }
+    function annualisationFactor(tf) {
+      const t = (tf || '').toLowerCase().trim();
+      let minutesPerBar = 60;
+      if (t.endsWith('m')) minutesPerBar = Math.max(1, Number.parseInt(t.slice(0, -1), 10));
+      else if (t.endsWith('h')) minutesPerBar = Math.max(1, Number.parseInt(t.slice(0, -1), 10)) * 60;
+      else if (t.endsWith('d')) minutesPerBar = Math.max(1, Number.parseInt(t.slice(0, -1), 10)) * 60 * 24;
+      const periodsPerYear = (365 * 24 * 60) / minutesPerBar;
+      return Math.sqrt(periodsPerYear);
+    }
     function plotIS(data) {
       const has = !!data;
       ensurePanelHasData('is', has);
@@ -299,6 +330,44 @@
         { x: ts, y: stratGross.rolling_sharpe, mode: 'lines', name: 'Gross' },
         { x: ts, y: stratNet.rolling_sharpe, mode: 'lines', name: 'Net' },
       ], { template: 'plotly_dark', height: 360, margin: { t: 30 }, xaxis: { title: 'Time' }, yaxis: { title: 'Annualized Sharpe' } });
+      const sharpeInputEl = document.getElementById('rollingSharpeDaysInput');
+      if (sharpeInputEl && !sharpeInputEl.dataset.wired) {
+        sharpeInputEl.dataset.wired = '1';
+        const ann = annualisationFactor((data.params && data.params.timeframe) || '1h');
+        const bpdLocal = barsPerDayFromTimeframe((data.params && data.params.timeframe) || '1h');
+        function rollingSharpe(arr, n) {
+          const out = new Array(arr.length).fill(null);
+          let sum = 0, sumSq = 0;
+          for (let i = 0; i < arr.length; i++) {
+            const v = Number(arr[i]);
+            const val = Number.isFinite(v) ? v : 0;
+            sum += val; sumSq += val * val;
+            if (i >= n) {
+              const drop = Number(arr[i - n]);
+              const dv = Number.isFinite(drop) ? drop : 0;
+              sum -= dv; sumSq -= dv * dv;
+            }
+            if (i >= n - 1) {
+              const mean = sum / n;
+              const variance = Math.max(0, (sumSq - n * mean * mean) / (n - 1));
+              const sd = Math.sqrt(variance);
+              out[i] = sd > 0 ? (mean / sd) * ann : null;
+            }
+          }
+          return out;
+        }
+        sharpeInputEl.addEventListener('input', () => {
+          let d = parseInt(sharpeInputEl.value || '0', 10);
+          if (!Number.isFinite(d) || d <= 0) d = 1;
+          const nBars = Math.max(1, Math.round(d * bpdLocal));
+          const g = rollingSharpe(stratGross.ret_log || [], nBars);
+          const n = rollingSharpe(stratNet.ret_log || [], nBars);
+          Plotly.react('is_rolling_sharpe', [
+            { x: ts, y: g, mode: 'lines', name: 'Gross' },
+            { x: ts, y: n, mode: 'lines', name: 'Net' },
+          ], { template: 'plotly_dark', height: 360, margin: { t: 30 }, xaxis: { title: 'Time' }, yaxis: { title: 'Annualized Sharpe' } });
+        });
+      }
 
       Plotly.newPlot('is_bar_rets', [
         { x: ts, y: stratGross.ret_log, mode: 'lines', name: 'Gross bar log ret', hovertemplate: 'Time: %{x}<br>Log return: %{y:.6f}<extra>Gross</extra>' },
@@ -340,15 +409,33 @@
         return out;
       }
       const turnover = (data.series && data.series.turnover) || [];
-      let maNInput = parseInt((document.getElementById('turnoverMaInput') && document.getElementById('turnoverMaInput').value) || '0', 10);
-      if (!Number.isFinite(maNInput) || maNInput <= 0) {
-        maNInput = Math.max(50, Math.floor(turnover.length * 0.02));
+      const tfStr = (data.params && data.params.timeframe) || '1h';
+      const bpd = barsPerDayFromTimeframe(tfStr);
+      let maDays = parseInt((document.getElementById('turnoverMaInput') && document.getElementById('turnoverMaInput').value) || '0', 10);
+      if (!Number.isFinite(maDays) || maDays <= 0) {
+        maDays = 30;
       }
-      const turnoverMA = movingAvg(turnover, maNInput);
+      const maBars = Math.max(1, Math.round(maDays * bpd));
+      const turnoverMA = movingAvg(turnover, maBars);
       Plotly.newPlot('is_turnover', [
         { x: ts, y: turnover, mode: 'lines', name: 'Turnover (per bar)', line: { color: '#888', width: 1 }, opacity: 0.6 },
-        { x: ts, y: turnoverMA, mode: 'lines', name: `Turnover MA(${maNInput})`, line: { color: '#5b8cff', width: 2 } },
+        { x: ts, y: turnoverMA, mode: 'lines', name: `Turnover MA(${maDays}d)`, line: { color: '#5b8cff', width: 2 } },
       ], { template: 'plotly_dark', height: 360, margin: { t: 30 }, xaxis: { title: 'Time' }, yaxis: { title: 'Turnover' } });
+
+      const maInputEl = document.getElementById('turnoverMaInput');
+      if (maInputEl && !maInputEl.dataset.wired) {
+        maInputEl.dataset.wired = '1';
+        maInputEl.addEventListener('input', () => {
+          let d = parseInt(maInputEl.value || '0', 10);
+          if (!Number.isFinite(d) || d <= 0) d = 1;
+          const nBars = Math.max(1, Math.round(d * bpd));
+          const ma = movingAvg(turnover, nBars);
+          Plotly.react('is_turnover', [
+            { x: ts, y: turnover, mode: 'lines', name: 'Turnover (per bar)', line: { color: '#888', width: 1 }, opacity: 0.6 },
+            { x: ts, y: ma, mode: 'lines', name: `Turnover MA(${d}d)`, line: { color: '#5b8cff', width: 2 } },
+          ], { template: 'plotly_dark', height: 360, margin: { t: 30 }, xaxis: { title: 'Time' }, yaxis: { title: 'Turnover' } });
+        });
+      }
 
       // Toggle button for log/linear scale on cumulative simple returns
       const toggleBtn = document.getElementById('toggle_cum_simple');
