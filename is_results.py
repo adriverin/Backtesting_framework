@@ -31,6 +31,7 @@ import numpy as np
 import pandas as pd
 
 from strategies import aVAILABLE_STRATEGIES, BaseStrategy  # type: ignore
+from position_sizing import compute_position_weights
 
 # ---------------------------------------------------------------------- #
 # Helper utilities                                                       #
@@ -168,6 +169,8 @@ def plot_cumulative_returns(
     fee_bps: float = 0.0,
     slippage_bps: float = 0.0,
     save_json_dir: str | None = None,
+    position_sizing_mode: str = "full_notional",
+    position_sizing_params: dict | None = None,
 ):
     strategy_kwargs = strategy_kwargs or {}
 
@@ -205,15 +208,24 @@ def plot_cumulative_returns(
     df["r"] = np.log(df[price_column]).diff().shift(-1)
     df["simple_r"] = df[price_column].pct_change().shift(-1)
     df["signal"] = signals
+    # Position sizing -> portfolio weight
+    df["weight"] = compute_position_weights(
+        signals=df["signal"],
+        simple_returns=df["simple_r"],
+        price=df[price_column],
+        timeframe=timeframe,
+        mode=position_sizing_mode,
+        mode_params=position_sizing_params,
+    )
     # Uncomment to shuffle the signals
     # Use to test if code is working and not always providing the same results
     # df["signal"] = np.random.permutation(df["signal"].to_numpy())
-    df["strategy_r"] = df["r"] * df["signal"]
-    df["strategy_simple_r"] = df["simple_r"] * df["signal"]
+    df["strategy_r"] = df["r"] * df["weight"]
+    df["strategy_simple_r"] = df["simple_r"] * df["weight"]
 
     # Fees/slippage model (per-side bps applied on position changes)
     fee_rate = (fee_bps + slippage_bps) / 10000.0
-    turnover = (df["signal"].diff().abs()).fillna(df["signal"].abs())
+    turnover = (df["weight"].diff().abs()).fillna(df["weight"].abs())
     df["turnover"] = turnover
     df["cost_simple"] = fee_rate * turnover
     # Net simple return after fees
@@ -259,7 +271,7 @@ def plot_cumulative_returns(
         cvar95_simple_net_pct = float("nan")
 
     # Win/loss stats per trade (aggregate contiguous non-zero positions)
-    pos = df["signal"].fillna(0)
+    pos = df["weight"].fillna(0)
     seg_id = (pos != pos.shift()).cumsum()
     mask = pos != 0
     if mask.any():
@@ -533,84 +545,132 @@ ml_params = {
     # "rsi_windows": (7, 14, 21, 30),        
 }
 
-# # Alternative: conservative ML params (aimed to reduce overfitting)
-ml_params_conservative = {
+
+ml_params_deepseekR1 = { # pvalue 0.66, N=50
     "interval": "4h",
-    "forecast_horizon_hours": 4,   # try 4–12
-    "n_epochs": 120,               # 80–160 with early stopping
-    "hidden_sizes": (32, 16, 8), # smaller network
-    "dropout_rate": 0.5,           # 0.4–0.6
-    "weight_decay": 0.01,          # stronger L2 regularization
-    "batch_size": 256,
-    "lr": 1e-4,
-    "train_ratio": 0.7,            # more validation
-    "val_ratio": 0.3,
-    "early_stopping_patience": 5,  # quicker stop
-    "signal_percentiles": (15, 85),# more conservative signals
+    "forecast_horizon_hours": 4,
+    "n_epochs": 150,  # Reduced
+    "hidden_sizes": (24, 12),  # Simpler architecture
+    "signal_percentiles": (15, 85),  # Less extreme percentiles
+    "train_ratio": 0.75,
+    "val_ratio": 0.25,  # More validation data
+    "early_stopping_patience": 15,  # More patience
+    "lr": 1e-5,  # Smaller learning rate
+    "dropout_rate": 0.6,  # Increased dropout
+    "weight_decay": 0.05,  # Stronger L2 regularization
+    "batch_size": 64,  # Smaller batch size
     "random_seed": 42,
     "hold_until_opposite": True,
-    # Feature windows: avoid very short lookbacks
-    "sma_windows": (8, 16, 32, 64),
-    "volatility_windows": (8, 16, 32, 64),
-    "momentum_windows": (8, 16, 32, 64),
-    "rsi_windows": (8, 14, 21, 28),
+    
+    # Technical indicator windows - less overlapping
+    "sma_windows": (6, 12, 24),  # Less frequent
+    "volatility_windows": (6, 12),  # Fewer windows
+    "momentum_windows": (6, 12),  # Fewer windows
+    "rsi_windows": (6, 12),  # Fewer windows
+    
+    # Additional regularization
+    # "use_batch_norm": True,  # Add batch normalization
+    # "label_smoothing": 0.1  # Helps with overconfident predictions
 }
 
+ml_params_kimiK2 = { # pvalue 0.08, N=50
+    # --- data & target -------------------------------------------------
+    "interval": "4h",                       # unchanged
+    "forecast_horizon_hours": 4,            # unchanged
 
-# Another alternative: MC-safe params (aimed to pass permutation tests better)
-ml_params_mc_safe = {
+    # --- model capacity (much smaller) ---------------------------------
+    "hidden_sizes": (16, 8),                # drop the deepest layer
+    "dropout_rate": 0.35,                   # slightly lower than 0.5 (works better with BN)
+
+    # --- training length & early stopping ------------------------------
+    "n_epochs": 300,                        # allow more epochs, but …
+    "early_stopping_patience": 25,          # … be *much* stricter
+    "lr": 1e-4,                             # a tad higher so it can escape sharp minima
+
+    # --- regularisation -------------------------------------------------
+    "weight_decay": 0.05,                   # stronger L2
+    "batch_size": 64,                       # smaller → more noise = regulariser
+    # "label_smoothing": 0.05,                # *new* aka invented by kimik2 – softens one-hot labels if you use them
+
+    # --- data splits (unchanged) ---------------------------------------
+    "train_ratio": 0.8,
+    "val_ratio": 0.2,
+
+    # --- reproducibility -----------------------------------------------
+    "random_seed": 42,
+
+    # --- trading logic (unchanged) -------------------------------------
+    "hold_until_opposite": True,
+
+    # --- feature engineering (shorter windows to avoid look-ahead bias) -
+    "sma_windows": (3, 6, 12),              # shorter history
+    "volatility_windows": (3, 6, 12),
+    "momentum_windows": (3, 6, 12),
+    "rsi_windows": (3, 6, 12),
+
+    # --- new regularisation knobs --------------------------------------
+    # "max_grad_norm": 1.0,                   # gradient clipping
+    # "scheduler": "CosineAnnealingWarmRestarts",  # cyclic LR to escape sharp minima
+    # "T_0": 25, "T_mult": 2,                # cosine-annealing hyper-params
+}
+
+ml_params_claudesonnet4 = { # pvalue 1, N=50
+    # Data and timing parameters
     "interval": "4h",
-    "forecast_horizon_hours": 8,   # longer horizon to reduce bar-to-bar noise sensitivity
-    "n_epochs": 100,
-    "hidden_sizes": (64, 32),      # much smaller network
-    "dropout_rate": 0.6,           # stronger dropout
-    "weight_decay": 0.02,          # stronger L2
-    "batch_size": 512,
-    "lr": 1e-4,
-    "train_ratio": 0.6,
-    "val_ratio": 0.4,              # larger validation split
-    "early_stopping_patience": 4,  # stop early
-    "signal_percentiles": (25, 75),# conservative signal gates
+    "forecast_horizon_hours": 4,
+    "train_ratio": 0.7,  # Reduced to allocate more data for validation
+    "val_ratio": 0.3,    # Increased validation set
     "random_seed": 42,
     "hold_until_opposite": True,
-    # Feature windows: remove very short lookbacks; emphasize medium horizons
-    "sma_windows": (12, 24, 48, 96),
-    "volatility_windows": (12, 24, 48, 96),
-    "momentum_windows": (12, 24, 48, 96),
-    "rsi_windows": (14, 21, 28, 42),
-    # Optional regime/vol settings (accepted by MLConfig)
-    "vol_window_hours": 96,
-    "volatility_regime_window": 7 * 24,
+    
+    # Model architecture - simplified
+    "hidden_sizes": (16, 8),  # Reduced layers and neurons
+    "dropout_rate": 0.3,      # Reduced but still meaningful
+    
+    # Training parameters - more conservative
+    "n_epochs": 100,          # Fewer epochs
+    "early_stopping_patience": 15,  # Increased patience
+    "lr": 1e-4,              # Slightly higher learning rate
+    "weight_decay": 0.001,    # Reduced regularization
+    "batch_size": 64,         # Smaller batches
+    
+    # Feature parameters - reduced complexity
+    "signal_percentiles": (15, 85),     # Less extreme percentiles
+    "sma_windows": (8, 16),            # Fewer SMA periods
+    "volatility_windows": (8, 16),     # Fewer volatility periods  
+    "momentum_windows": (8, 16),       # Fewer momentum periods
+    "rsi_windows": (8, 16),            # Fewer RSI periods
 }
 
-ml_params_mc_strict = {
+ml_params_geminipro25 = { # pvalue 0.62, N=50
     "interval": "4h",
-    "forecast_horizon_hours": 12,
-    "n_epochs": 90,
-    "hidden_sizes": (48, 24),
-    "dropout_rate": 0.6,
-    "weight_decay": 0.03,
-    "batch_size": 512,
-    "lr": 1e-4,
-    "train_ratio": 0.6,
-    "val_ratio": 0.4,
-    "early_stopping_patience": 4,
-    "n_quantiles": 3,
-    "signal_percentiles": (35, 65),
-    "hold_until_opposite": False,
-
-    # Features: remove short windows; emphasize medium/long
-    "sma_windows": (24, 48, 96, 192),
-    "volatility_windows": (24, 48, 96, 192),
-    "momentum_windows": (24, 48, 96, 192),
-    "rsi_windows": (14, 28, 42, 56),
-
-    # Regime features and longer volatility context
-    "enable_regime_features": True,
-    "vol_window_hours": 168,            # 7 days
-    "volatility_regime_window": 720,    # 30 days
-
+    "forecast_horizon_hours": 4,
+    
+    # --- Model Simplicity ---
+    "n_epochs": 100,                     # Reduced max epochs, rely on early stopping
+    "hidden_sizes": (16, 8),             # SHALLOWER & NARROWER network
+    
+    # --- Data & Validation ---
+    "signal_percentiles": (10, 90),
+    "train_ratio": 0.7,                  # Smaller train set, larger val/test
+    "val_ratio": 0.15,                   # IMPORTANT: Add a dedicated test set (remaining 0.15)
+    "early_stopping_patience": 15,       # Slightly more patience for noisy validation loss
+    
+    # --- Regularization (Balanced Approach) ---
+    "lr": 1e-4,                          # Slightly higher LR, often works better with smaller models
+    "dropout_rate": 0.2,                 # REDUCED dropout, less aggressive
+    "weight_decay": 0.001,               # REDUCED weight decay (L2 regularization)
+    
+    # --- Training Dynamics ---
+    "batch_size": 64,                    # Smaller batch size can add regularizing noise
     "random_seed": 42,
+    "hold_until_opposite": True,
+    
+    # --- Feature Simplification ---
+    "sma_windows": (5, 10),              # Fewer, more distinct windows
+    "volatility_windows": (10,),         # Only one, longer-term volatility measure
+    "momentum_windows": (5, 10),         # Fewer, more distinct windows
+    "rsi_windows": (14,),                # The standard RSI window
 }
 
 
@@ -630,4 +690,10 @@ if __name__ == "__main__":
         fee_bps=10.0,
         slippage_bps=10.0,
         save_json_dir="reports/example_run",
+        # position_sizing_mode="vol_target",
+        # position_sizing_params={
+        #     "target_vol_annual": 0.2,
+        #     "lookback": 50,
+        #     "max_leverage": 3.0,
+        # },
     )

@@ -21,6 +21,7 @@ from itertools import repeat
 from permutations import get_permutation
 
 from strategies import aVAILABLE_STRATEGIES, BaseStrategy  # type: ignore
+from position_sizing import compute_position_weights
 
 # ---------------------------------------------------------------------- #
 # Utility                                                                 #
@@ -114,6 +115,8 @@ def _compute_single_perm_pf_net_oos(
     train_lookback: int,
     train_step: int,
     perm_start_index: int,
+    position_sizing_mode: str = "full_notional",
+    position_sizing_params: dict | None = None,
 ) -> float:
     full_fp = Path(f"data/ohlcv_{asset}_{timeframe}.parquet")
     full_df = pd.read_parquet(full_fp)
@@ -134,10 +137,18 @@ def _compute_single_perm_pf_net_oos(
     perm_df["r"] = np.log(perm_df[price_column]).diff().shift(-1)
     perm_df["simple_r"] = perm_df[price_column].pct_change().shift(-1)
     perm_df["signal"] = perm_signals
-    perm_df["strategy_r"] = perm_df["r"] * perm_df["signal"]
-    perm_df["strategy_simple_r"] = perm_df["simple_r"] * perm_df["signal"]
+    perm_df["weight"] = compute_position_weights(
+        signals=pd.Series(perm_signals, index=perm_df.index),
+        simple_returns=perm_df["simple_r"],
+        price=perm_df[price_column],
+        timeframe=timeframe,
+        mode=position_sizing_mode,
+        mode_params=position_sizing_params,
+    )
+    perm_df["strategy_r"] = perm_df["r"] * perm_df["weight"]
+    perm_df["strategy_simple_r"] = perm_df["simple_r"] * perm_df["weight"]
     fee_rate = (fee_bps + slippage_bps) / 10000.0
-    turnover = (perm_df["signal"].diff().abs()).fillna(perm_df["signal"].abs())
+    turnover = (perm_df["weight"].diff().abs()).fillna(perm_df["weight"].abs())
     perm_df["cost_simple"] = fee_rate * turnover
     perm_df["strategy_simple_r_net"] = perm_df["strategy_simple_r"] - perm_df["cost_simple"]
     perm_df["strategy_r_net"] = np.log((1.0 + perm_df["strategy_simple_r_net"]).clip(lower=1e-12))
@@ -184,6 +195,8 @@ class WalkForwardMCTester:
         self.strategy_cls: Type[BaseStrategy] = aVAILABLE_STRATEGIES[strategy_name]
         self.fee_bps = fee_bps
         self.slippage_bps = slippage_bps
+        self.position_sizing_mode: str = "full_notional"
+        self.position_sizing_params: dict = {}
 
         self.perm_start_index = self._get_perm_start_index(start_date)
         print(f"Permutation start index: {self.perm_start_index}")
@@ -302,10 +315,18 @@ class WalkForwardMCTester:
         perm_df["r"] = np.log(perm_df[self.price_column]).diff().shift(-1)
         perm_df["simple_r"] = perm_df[self.price_column].pct_change().shift(-1)
         perm_df["signal"] = perm_signals
-        perm_df["strategy_r"] = perm_df["r"] * perm_df["signal"]
-        perm_df["strategy_simple_r"] = perm_df["simple_r"] * perm_df["signal"]
+        perm_df["weight"] = compute_position_weights(
+            signals=pd.Series(perm_signals, index=perm_df.index),
+            simple_returns=perm_df["simple_r"],
+            price=perm_df[self.price_column],
+            timeframe=self.timeframe,
+            mode=self.position_sizing_mode,
+            mode_params=self.position_sizing_params,
+        )
+        perm_df["strategy_r"] = perm_df["r"] * perm_df["weight"]
+        perm_df["strategy_simple_r"] = perm_df["simple_r"] * perm_df["weight"]
         fee_rate = (self.fee_bps + self.slippage_bps) / 10000.0
-        turnover = (perm_df["signal"].diff().abs()).fillna(perm_df["signal"].abs())
+        turnover = (perm_df["weight"].diff().abs()).fillna(perm_df["weight"].abs())
         perm_df["cost_simple"] = fee_rate * turnover
         perm_df["strategy_simple_r_net"] = perm_df["strategy_simple_r"] - perm_df["cost_simple"]
         perm_df["strategy_r_net"] = np.log((1.0 + perm_df["strategy_simple_r_net"]).clip(lower=1e-12))
@@ -326,11 +347,19 @@ class WalkForwardMCTester:
         real_df["r"] = np.log(real_df[self.price_column]).diff().shift(-1)
         real_df["simple_r"] = real_df[self.price_column].pct_change().shift(-1)
         real_df["signal"] = real_signals
-        real_df["strategy_r"] = real_df["r"] * real_df["signal"]
-        real_df["strategy_simple_r"] = real_df["simple_r"] * real_df["signal"]
+        real_df["weight"] = compute_position_weights(
+            signals=pd.Series(real_signals, index=real_df.index),
+            simple_returns=real_df["simple_r"],
+            price=real_df[self.price_column],
+            timeframe=self.timeframe,
+            mode=self.position_sizing_mode,
+            mode_params=self.position_sizing_params,
+        )
+        real_df["strategy_r"] = real_df["r"] * real_df["weight"]
+        real_df["strategy_simple_r"] = real_df["simple_r"] * real_df["weight"]
         # Costs
         fee_rate = (self.fee_bps + self.slippage_bps) / 10000.0
-        turnover = (real_df["signal"].diff().abs()).fillna(real_df["signal"].abs())
+        turnover = (real_df["weight"].diff().abs()).fillna(real_df["weight"].abs())
         real_df["cost_simple"] = fee_rate * turnover
         real_df["strategy_simple_r_net"] = real_df["strategy_simple_r"] - real_df["cost_simple"]
         real_df["strategy_r_net"] = np.log((1.0 + real_df["strategy_simple_r_net"]).clip(lower=1e-12))
