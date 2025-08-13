@@ -199,6 +199,9 @@
         { label: 'Net Log Ret', value: p(metrics.pct_return_log_net), good: Number(metrics.pct_return_log_net) >= 0 },
         { label: 'Gross Simple Ret', value: p(metrics.pct_return_simple_gross), good: Number(metrics.pct_return_simple_gross) >= 0 },
         { label: 'Net Simple Ret', value: p(metrics.pct_return_simple_net), good: Number(metrics.pct_return_simple_net) >= 0 },
+        { label: 'Win rate (net)', value: p(metrics.win_rate_net_pct), good: Number(metrics.win_rate_net_pct) >= 50 },
+        { label: 'Avg win (net)', value: p(metrics.avg_win_net_pct), good: Number(metrics.avg_win_net_pct) > 0 },
+        { label: 'Avg loss (net)', value: p(metrics.avg_loss_net_pct), good: Number(metrics.avg_loss_net_pct) > -1 },
         { label: 'Avg Turnover/day', value: fmt(metrics.avg_turnover_per_day, 2), good: true },
         { label: 'Avg Net DD', value: p(metrics.avg_net_drawdown_pct), good: Number(metrics.avg_net_drawdown_pct) >= -10 },
         { label: 'VaR 95 (net, per-bar)', value: p(metrics.var95_net_pct), good: Number(metrics.var95_net_pct) >= -1 },
@@ -390,6 +393,8 @@
       ], { template: 'plotly_dark', barmode: 'overlay', height: 360, margin: { t: 30 }, xaxis: { title: 'Bar log return', range: [lo, hi] }, yaxis: { title: 'Density' }, shapes: [ { type: 'line', x0: 0, x1: 0, y0: 0, y1: 1, xref: 'x', yref: 'paper', line: { color: '#777', dash: 'dot' } } ], annotations: [{ text: `Gross μ=${Number(muGross).toExponential(2)}, σ=${Number(sdGross).toExponential(2)}\nNet μ=${Number(muNet).toExponential(2)}, σ=${Number(sdNet).toExponential(2)}`, xref: 'paper', yref: 'paper', x: 1, y: 1, xanchor: 'right', yanchor: 'top', align: 'left', bgcolor: '#111', bordercolor: '#444', borderwidth: 1, opacity: 0.9, font: { size: 10 } }] });
 
       makeTable('is_metrics', data.metrics);
+      // also surface core win/loss stats near run metrics if present
+      // no structural change needed as makeTable renders all metrics
       makeTable('is_params', data.params);
       renderKpis('is_kpis', data.metrics);
 

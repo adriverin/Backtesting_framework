@@ -239,7 +239,8 @@ def plot_cumulative_returns(
     pct_return_simple_net = strat_cum_simple_net.iloc[-1] * 100
 
     # Risk metrics (per-bar, on net simple return stream)
-    net_simple = df["strategy_simple_r_net"].dropna().values
+    net_simple_ser = df["strategy_simple_r_net"].dropna()
+    net_simple = net_simple_ser.values
     if len(net_simple) > 0:
         q05 = float(np.quantile(net_simple, 0.05))
         var95_simple_net_pct = float(-q05 * 100.0)
@@ -247,6 +248,27 @@ def plot_cumulative_returns(
     else:
         var95_simple_net_pct = float("nan")
         cvar95_simple_net_pct = float("nan")
+
+    # Win/loss stats per trade (aggregate contiguous non-zero positions)
+    pos = df["signal"].fillna(0)
+    seg_id = (pos != pos.shift()).cumsum()
+    mask = pos != 0
+    if mask.any():
+        trade_returns = (
+            df.loc[mask]
+              .groupby(seg_id[mask])["strategy_simple_r_net"]
+              .apply(lambda g: float((1.0 + g).prod() - 1.0))
+        )
+        wins = trade_returns[trade_returns > 0]
+        losses = trade_returns[trade_returns < 0]
+        denom = int(len(trade_returns))
+        win_rate_net_pct = float(len(wins) / denom * 100.0) if denom > 0 else float("nan")
+        avg_win_net_pct = float(wins.mean() * 100.0) if len(wins) > 0 else float("nan")
+        avg_loss_net_pct = float(losses.mean() * 100.0) if len(losses) > 0 else float("nan")
+    else:
+        win_rate_net_pct = float("nan")
+        avg_win_net_pct = float("nan")
+        avg_loss_net_pct = float("nan")
 
     # Diagnostics for costs/turnover
     # Estimate bars per day from timeframe
@@ -273,19 +295,19 @@ def plot_cumulative_returns(
     print("-" * 80)
     print(f"Gross  Profit Factor : {pf_gross:.4f}")
     print(f"Gross  Sharpe (log)  : {sharpe_gross:.4f}")
-    print(f"Gross  % Log Return  : {pct_return_log_gross:.2f}%")
+    # print(f"Gross  % Log Return  : {pct_return_log_gross:.2f}%")
     print(f"Gross  % Simple Ret  : {pct_return_simple_gross:.2f}%")
     print("-")
     print(f"Net    Profit Factor : {pf_net:.4f}   (fees={fee_bps}bps, slip={slippage_bps}bps per side)")
     print(f"Net    Sharpe (log)  : {sharpe_net:.4f}")
-    print(f"Net    % Log Return  : {pct_return_log_net:.2f}%")
+    # print(f"Net    % Log Return  : {pct_return_log_net:.2f}%")
     print(f"Net    % Simple Ret  : {pct_return_simple_net:.2f}%")
     print("-")
     print(f"Diagnostics: avg turnover/bar={avg_turnover_per_bar:.3f}, ~turnover/day={avg_turnover_per_day:.3f}")
     print(f"Diagnostics: total fees (simple)={total_cost_simple:.6f} | breakeven fee per-side ≈ {breakeven_fee_bps:.2f} bps")
     print(f"Diagnostics: VaR95 (net, per-bar) ≈ {var95_simple_net_pct:.2f}% | CVaR95 ≈ {cvar95_simple_net_pct:.2f}%")
     print("-")
-    print(f"Asset  % Log Return  : {pct_return_asset_log:.2f}%")
+    # print(f"Asset  % Log Return  : {pct_return_asset_log:.2f}%")
     print(f"Asset  % Simple Ret  : {pct_return_asset_simple:.2f}%")
     print("=" * 80)
 
@@ -399,6 +421,9 @@ def plot_cumulative_returns(
                 "avg_net_drawdown_pct": avg_net_dd * 100.0,
                 "var95_net_pct": var95_simple_net_pct,
                 "cvar95_net_pct": cvar95_simple_net_pct,
+                "win_rate_net_pct": win_rate_net_pct,
+                "avg_win_net_pct": avg_win_net_pct,
+                "avg_loss_net_pct": avg_loss_net_pct,
             },
             "series": {
                 "timestamps": [ts.isoformat() for ts in df.index.to_pydatetime()],
@@ -477,8 +502,8 @@ if __name__ == "__main__":
     ml_params = {
         "interval": "4h",
         "forecast_horizon_hours": 4,
-        "n_epochs": 150,
-        "hidden_sizes": (256, 128, 64, 32),
+        "n_epochs": 250,
+        "hidden_sizes": (512, 256, 128, 64, 32),
         "signal_percentiles": (10, 90),
         "train_ratio": 0.8,
         "val_ratio": 0.2,
@@ -499,6 +524,29 @@ if __name__ == "__main__":
         # "rsi_windows": (7, 14, 21, 30),        
     }
 
+    # # Alternative: conservative ML params (aimed to reduce overfitting)
+    ml_params_conservative = {
+        "interval": "4h",
+        "forecast_horizon_hours": 4,   # try 4–12
+        "n_epochs": 120,               # 80–160 with early stopping
+        "hidden_sizes": (128, 64, 32), # smaller network
+        "dropout_rate": 0.5,           # 0.4–0.6
+        "weight_decay": 0.01,          # stronger L2 regularization
+        "batch_size": 256,
+        "lr": 1e-4,
+        "train_ratio": 0.7,            # more validation
+        "val_ratio": 0.3,
+        "early_stopping_patience": 5,  # quicker stop
+        "signal_percentiles": (15, 85),# more conservative signals
+        "random_seed": 42,
+        "hold_until_opposite": True,
+        # Feature windows: avoid very short lookbacks
+        "sma_windows": (8, 16, 32, 64),
+        "volatility_windows": (8, 16, 32, 64),
+        "momentum_windows": (8, 16, 32, 64),
+        "rsi_windows": (8, 14, 21, 28),
+    }
+
 
     plot_cumulative_returns(
         start_date="2018-07-25",
@@ -508,7 +556,7 @@ if __name__ == "__main__":
         asset="VETUSD",
         timeframe="4h",
         show_plot=False,
-        strategy_kwargs=ml_params,
+        strategy_kwargs=ml_params_conservative,
         price_column="vwap",
         fee_bps=10.0,
         slippage_bps=10.0,
