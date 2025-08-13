@@ -83,6 +83,9 @@ def get_permutation(
 
         perm_bars = np.exp(perm_bars)
         perm_bars = pd.DataFrame(perm_bars, index=time_index, columns=['open', 'high', 'low', 'close'])
+        # Preserve volume if available so downstream code (e.g., VWAP) can work
+        if 'volume' in reg_bars.columns:
+            perm_bars['volume'] = reg_bars['volume']
 
         perm_ohlc.append(perm_bars)
 
