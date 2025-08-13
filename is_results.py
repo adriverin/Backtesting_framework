@@ -496,57 +496,117 @@ def main():
     )
 
 
+
+
+ml_params = {
+    "interval": "4h",
+    "forecast_horizon_hours": 4,
+    "n_epochs": 200,
+    "hidden_sizes": (32, 16, 8),
+    "signal_percentiles": (10, 90),
+    "train_ratio": 0.8,
+    "val_ratio": 0.2,
+    "early_stopping_patience": 10,
+    "lr": 5e-5,
+    "dropout_rate": 0.5,           # 0.4–0.6
+    "weight_decay": 0.01,          # stronger L2 regularization
+    "batch_size": 128,
+    "random_seed": 42,
+    "hold_until_opposite": True,
+    #
+    "sma_windows": (4, 8, 16, 32),
+    "volatility_windows": (4, 8, 16, 32),
+    "momentum_windows": (4, 8, 16, 32, 64),
+    "rsi_windows": (4, 8, 16, 32, 64),
+    # "sma_windows": (5, 10, 20, 30),
+    # "volatility_windows": (5, 10, 20, 30),
+    # "momentum_windows": (7, 14, 21, 30),
+    # "rsi_windows": (7, 14, 21, 30),        
+}
+
+# # Alternative: conservative ML params (aimed to reduce overfitting)
+ml_params_conservative = {
+    "interval": "4h",
+    "forecast_horizon_hours": 4,   # try 4–12
+    "n_epochs": 120,               # 80–160 with early stopping
+    "hidden_sizes": (32, 16, 8), # smaller network
+    "dropout_rate": 0.5,           # 0.4–0.6
+    "weight_decay": 0.01,          # stronger L2 regularization
+    "batch_size": 256,
+    "lr": 1e-4,
+    "train_ratio": 0.7,            # more validation
+    "val_ratio": 0.3,
+    "early_stopping_patience": 5,  # quicker stop
+    "signal_percentiles": (15, 85),# more conservative signals
+    "random_seed": 42,
+    "hold_until_opposite": True,
+    # Feature windows: avoid very short lookbacks
+    "sma_windows": (8, 16, 32, 64),
+    "volatility_windows": (8, 16, 32, 64),
+    "momentum_windows": (8, 16, 32, 64),
+    "rsi_windows": (8, 14, 21, 28),
+}
+
+
+# Another alternative: MC-safe params (aimed to pass permutation tests better)
+ml_params_mc_safe = {
+    "interval": "4h",
+    "forecast_horizon_hours": 8,   # longer horizon to reduce bar-to-bar noise sensitivity
+    "n_epochs": 100,
+    "hidden_sizes": (64, 32),      # much smaller network
+    "dropout_rate": 0.6,           # stronger dropout
+    "weight_decay": 0.02,          # stronger L2
+    "batch_size": 512,
+    "lr": 1e-4,
+    "train_ratio": 0.6,
+    "val_ratio": 0.4,              # larger validation split
+    "early_stopping_patience": 4,  # stop early
+    "signal_percentiles": (25, 75),# conservative signal gates
+    "random_seed": 42,
+    "hold_until_opposite": True,
+    # Feature windows: remove very short lookbacks; emphasize medium horizons
+    "sma_windows": (12, 24, 48, 96),
+    "volatility_windows": (12, 24, 48, 96),
+    "momentum_windows": (12, 24, 48, 96),
+    "rsi_windows": (14, 21, 28, 42),
+    # Optional regime/vol settings (accepted by MLConfig)
+    "vol_window_hours": 96,
+    "volatility_regime_window": 7 * 24,
+}
+
+ml_params_mc_strict = {
+    "interval": "4h",
+    "forecast_horizon_hours": 12,
+    "n_epochs": 90,
+    "hidden_sizes": (48, 24),
+    "dropout_rate": 0.6,
+    "weight_decay": 0.03,
+    "batch_size": 512,
+    "lr": 1e-4,
+    "train_ratio": 0.6,
+    "val_ratio": 0.4,
+    "early_stopping_patience": 4,
+    "n_quantiles": 3,
+    "signal_percentiles": (35, 65),
+    "hold_until_opposite": False,
+
+    # Features: remove short windows; emphasize medium/long
+    "sma_windows": (24, 48, 96, 192),
+    "volatility_windows": (24, 48, 96, 192),
+    "momentum_windows": (24, 48, 96, 192),
+    "rsi_windows": (14, 28, 42, 56),
+
+    # Regime features and longer volatility context
+    "enable_regime_features": True,
+    "vol_window_hours": 168,            # 7 days
+    "volatility_regime_window": 720,    # 30 days
+
+    "random_seed": 42,
+}
+
+
 if __name__ == "__main__":
     # main()
-
-    ml_params = {
-        "interval": "4h",
-        "forecast_horizon_hours": 4,
-        "n_epochs": 250,
-        "hidden_sizes": (512, 256, 128, 64, 32),
-        "signal_percentiles": (10, 90),
-        "train_ratio": 0.8,
-        "val_ratio": 0.2,
-        "early_stopping_patience": 10,
-        "lr": 5e-5,
-        "weight_decay": 0.001,
-        "batch_size": 128,
-        "random_seed": 42,
-        "hold_until_opposite": True,
-        #
-        "sma_windows": (4, 8, 16, 32),
-        "volatility_windows": (4, 8, 16, 32),
-        "momentum_windows": (4, 8, 16, 32, 64),
-        "rsi_windows": (4, 8, 16, 32, 64),
-        # "sma_windows": (5, 10, 20, 30),
-        # "volatility_windows": (5, 10, 20, 30),
-        # "momentum_windows": (7, 14, 21, 30),
-        # "rsi_windows": (7, 14, 21, 30),        
-    }
-
-    # # Alternative: conservative ML params (aimed to reduce overfitting)
-    ml_params_conservative = {
-        "interval": "4h",
-        "forecast_horizon_hours": 4,   # try 4–12
-        "n_epochs": 120,               # 80–160 with early stopping
-        "hidden_sizes": (128, 64, 32), # smaller network
-        "dropout_rate": 0.5,           # 0.4–0.6
-        "weight_decay": 0.01,          # stronger L2 regularization
-        "batch_size": 256,
-        "lr": 1e-4,
-        "train_ratio": 0.7,            # more validation
-        "val_ratio": 0.3,
-        "early_stopping_patience": 5,  # quicker stop
-        "signal_percentiles": (15, 85),# more conservative signals
-        "random_seed": 42,
-        "hold_until_opposite": True,
-        # Feature windows: avoid very short lookbacks
-        "sma_windows": (8, 16, 32, 64),
-        "volatility_windows": (8, 16, 32, 64),
-        "momentum_windows": (8, 16, 32, 64),
-        "rsi_windows": (8, 14, 21, 28),
-    }
-
 
     plot_cumulative_returns(
         start_date="2018-07-25",
@@ -556,7 +616,7 @@ if __name__ == "__main__":
         asset="VETUSD",
         timeframe="4h",
         show_plot=False,
-        strategy_kwargs=ml_params_conservative,
+        strategy_kwargs=ml_params,
         price_column="vwap",
         fee_bps=10.0,
         slippage_bps=10.0,

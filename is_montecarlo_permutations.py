@@ -419,7 +419,7 @@ if __name__ == "__main__":
     # }
 
 
-    from is_results import ml_params, ml_params_conservative
+    from is_results import ml_params, ml_params_conservative, ml_params_mc_safe, ml_params_mc_strict
 
 
     tester = InSampleMCTester(
@@ -431,7 +431,9 @@ if __name__ == "__main__":
         n_perm=50,
         generate_plot=True,
         # strategy_kwargs=ml_params,
-        strategy_kwargs=ml_params_conservative,
+        # strategy_kwargs=ml_params_conservative,
+        # strategy_kwargs=ml_params_mc_safe,
+        strategy_kwargs=ml_params,
         price_column="vwap",
         fee_bps=10.0,
         slippage_bps=10.0,
