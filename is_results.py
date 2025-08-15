@@ -519,31 +519,7 @@ def main():
 
 
 
-ml_params = {
-    "interval": "4h",
-    "forecast_horizon_hours": 4,
-    "n_epochs": 200,
-    "hidden_sizes": (32, 16, 8),
-    "signal_percentiles": (10, 90),
-    "train_ratio": 0.8,
-    "val_ratio": 0.2,
-    "early_stopping_patience": 10,
-    "lr": 5e-5,
-    "dropout_rate": 0.5,           # 0.4–0.6
-    "weight_decay": 0.01,          # stronger L2 regularization
-    "batch_size": 128,
-    "random_seed": 42,
-    "hold_until_opposite": True,
-    #
-    "sma_windows": (4, 8, 16),
-    "volatility_windows": (4, 8, 16),
-    "momentum_windows": (4, 8, 16),
-    "rsi_windows": (4, 8, 16),
-    # "sma_windows": (5, 10, 20, 30),
-    # "volatility_windows": (5, 10, 20, 30),
-    # "momentum_windows": (7, 14, 21, 30),
-    # "rsi_windows": (7, 14, 21, 30),        
-}
+
 
 
 ml_params_deepseekR1 = { # pvalue 0.66, N=50
@@ -674,6 +650,34 @@ ml_params_geminipro25 = { # pvalue 0.62, N=50
 }
 
 
+ml_params = {
+    "interval": "4h",
+    "forecast_horizon_hours": 4,
+    "n_epochs": 200,
+    "hidden_sizes": (32, 16, 8),
+    "signal_percentiles": (10, 90),
+    "train_ratio": 0.8,
+    "val_ratio": 0.2,
+    "early_stopping_patience": 10,
+    "lr": 5e-5,
+    "dropout_rate": 0.5,           # 0.4–0.6
+    "weight_decay": 0.01,          # stronger L2 regularization
+    "batch_size": 128,
+    "random_seed": 42,
+    "hold_until_opposite": True,
+    #
+    "sma_windows": (4, 8, 16),
+    "volatility_windows": (4, 8, 16),
+    "momentum_windows": (4, 8, 16),
+    "rsi_windows": (4, 8, 16),
+    # "sma_windows": (5, 10, 20, 30),
+    # "volatility_windows": (5, 10, 20, 30),
+    # "momentum_windows": (7, 14, 21, 30),
+    # "rsi_windows": (7, 14, 21, 30),        
+}
+
+
+
 if __name__ == "__main__":
     # main()
 
@@ -686,14 +690,16 @@ if __name__ == "__main__":
         timeframe="4h",
         show_plot=False,
         strategy_kwargs=ml_params,
-        price_column="vwap",
+        price_column="vwap_20",
         fee_bps=10.0,
         slippage_bps=10.0,
         save_json_dir="reports/example_run",
-        # position_sizing_mode="vol_target",
+        position_sizing_mode="fixed_fraction",
+        position_sizing_params={
+            "fraction": 0.1,
+        },
+        # position_sizing_mode="fixed_notional",
         # position_sizing_params={
-        #     "target_vol_annual": 0.2,
-        #     "lookback": 50,
-        #     "max_leverage": 3.0,
-        # },
+        #     "fixed_notional": 0.1,
+        # },        
     )

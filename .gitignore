@@ -8,3 +8,6 @@ strategies/.DS_Store
 
 
 old/
+tmp_*
+reports/dashboard_*
+reports/*.png

@@ -19,37 +19,38 @@
       --shadow: 0 8px 24px rgba(0,0,0,0.45);
     }
     * { box-sizing: border-box; }
-    body { background: radial-gradient(1200px 800px at 20% -10%, #1a1a24 0%, transparent 60%), radial-gradient(900px 800px at 100% 0%, #10101a 0%, transparent 60%), var(--bg); color: var(--text); font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
-    .wrap { max-width: 1280px; margin: 0 auto; padding: 24px 20px 40px; }
-    h1 { font-size: 22px; letter-spacing: 0.2px; font-weight: 700; margin: 0 0 14px; }
-    .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+    body { background: radial-gradient(1200px 800px at 20% -10%, #171722 0%, transparent 60%), radial-gradient(900px 800px at 100% 0%, #0f0f18 0%, transparent 60%), var(--bg); color: var(--text); font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+    .wrap { max-width: 1360px; margin: 0 auto; padding: 28px 22px 44px; }
+    h1 { font-size: 24px; letter-spacing: 0.2px; font-weight: 800; margin: 0 0 16px; }
+    .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 16px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 14px; background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.02)); box-shadow: var(--shadow); }
     .toolbar input { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; outline: none; transition: border .2s ease, box-shadow .2s ease; }
     .toolbar input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,140,255,0.2); }
-    .toolbar button { background: linear-gradient(180deg, var(--accent), #3f6fde); color: white; border: none; padding: 10px 14px; border-radius: 10px; cursor: pointer; font-weight: 600; letter-spacing: 0.2px; box-shadow: var(--shadow); transition: transform .05s ease, filter .2s ease; }
-    .toolbar button:hover { filter: brightness(1.05); }
+    .toolbar button { background: linear-gradient(180deg, var(--accent), #3f6fde); color: white; border: none; padding: 10px 14px; border-radius: 10px; cursor: pointer; font-weight: 700; letter-spacing: 0.2px; box-shadow: var(--shadow); transition: transform .05s ease, filter .2s ease; }
+    .toolbar button:hover { filter: brightness(1.06); }
     .toolbar button:active { transform: translateY(1px); }
-    .tabs { position: sticky; top: 0; z-index: 5; backdrop-filter: saturate(140%) blur(6px); display: flex; gap: 8px; padding: 8px 0; margin: 6px 0 14px; border-bottom: 1px solid var(--border); }
-    .tab { padding: 8px 14px; border: 1px solid var(--border); cursor: pointer; border-radius: 999px; background: var(--surface); color: var(--muted); transition: all .2s ease; font-weight: 600; }
+    .tabs { position: sticky; top: 0; z-index: 5; backdrop-filter: saturate(140%) blur(6px); display: flex; gap: 8px; padding: 10px 0; margin: 8px 0 16px; border-bottom: 1px solid var(--border); }
+    .tab { padding: 9px 16px; border: 1px solid var(--border); cursor: pointer; border-radius: 999px; background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.02)); color: var(--muted); transition: all .2s ease; font-weight: 700; }
     .tab:hover { color: var(--text); }
-    .tab.active { background: linear-gradient(180deg, rgba(91,140,255,.15), rgba(91,140,255,.08)); color: var(--text); border-color: #3a3a48; }
+    .tab.active { background: linear-gradient(180deg, rgba(91,140,255,.18), rgba(91,140,255,.10)); color: var(--text); border-color: #3a3a48; box-shadow: 0 2px 10px rgba(91,140,255,0.2); }
     .panel { display: none; }
     .panel.active { display: block; }
-    .grid { display: grid; grid-template-columns: 1fr; gap: 18px; }
-    .row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+    .row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
     @media (max-width: 980px) { .row { grid-template-columns: 1fr; } }
-    .col { display: grid; grid-template-columns: 1fr; gap: 18px; }
-    .box { border: 1px solid var(--border); padding: 14px; border-radius: 14px; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.0)); box-shadow: var(--shadow); }
-    .box h2 { margin: 0 0 10px; font-size: 14px; color: var(--muted); font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .col { display: grid; grid-template-columns: 1fr; gap: 20px; }
+    .box { border: 1px solid var(--border); padding: 16px; border-radius: 16px; background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.01)); box-shadow: var(--shadow); }
+    .box h2 { margin: 0 0 12px; font-size: 13px; color: var(--muted); font-weight: 800; letter-spacing: 0.35px; text-transform: uppercase; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .mini-btn { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 999px; padding: 6px 10px; cursor: pointer; font-size: 12px; font-weight: 600; }
     .mini-btn:hover { border-color: #3a3a48; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th, td { border-bottom: 1px solid var(--border); padding: 6px 8px; text-align: left; }
     th { color: var(--muted); font-weight: 600; }
     /* KPI grid */
-    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
-    .kpi { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; padding: 12px; box-shadow: var(--shadow); display: grid; gap: 6px; }
-    .kpi .label { color: var(--muted); font-size: 12px; letter-spacing: 0.2px; }
-    .kpi .value { font-size: 18px; font-weight: 700; letter-spacing: 0.3px; }
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+    .kpi { background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015)); border: 1px solid var(--border); border-radius: 14px; padding: 14px; box-shadow: var(--shadow); display: grid; gap: 6px; transition: transform .08s ease, border-color .2s ease, background .2s ease; }
+    .kpi:hover { transform: translateY(-1px); border-color: #3a3a48; }
+    .kpi .label { color: var(--muted); font-size: 12px; letter-spacing: 0.25px; }
+    .kpi .value { font-size: 20px; font-weight: 800; letter-spacing: 0.35px; }
     .kpi .value .unit { font-size: 12px; color: var(--muted); margin-left: 6px; font-weight: 600; }
     .kpi.good .value { color: var(--accent-2); }
     .kpi.bad .value { color: #f27777; }
@@ -115,11 +116,21 @@
     <div id="oos_wf" class="panel">
     <div class="grid">
       <div class="col">
-        <div class="box"><h2>OOS Cumulative Log (Gross vs Net)</h2><div id="oos_wf_cum"></div></div>
-        <div class="box"><h2>OOS Underwater (Drawdown)</h2><div id="oos_wf_dd"></div></div>
+        <div class="box"><h2>Key Metrics</h2><div id="oos_wf_kpis" class="kpis"></div></div>
+        <div class="box"><h2>Cumulative Log Returns</h2><div id="oos_wf_cum_log"></div></div>
+        <div class="box"><h2>Cumulative Simple Returns <button id="toggle_oos_cum_simple" class="mini-btn">Log scale</button></h2><div id="oos_wf_cum_simple"></div></div>
+        <div class="box"><h2>Underwater (Drawdown)</h2><div id="oos_wf_dd"></div></div>
+        <div class="box"><h2>Turnover</h2><div id="oos_wf_turnover"></div></div>
       </div>
       <div class="row">
-        <div class="box"><h2>OOS Rolling Sharpe</h2><div id="oos_wf_rolling"></div></div>
+        <div class="box"><h2>Rolling Sharpe</h2><div id="oos_wf_rolling"></div></div>
+        <div class="box"><h2>Bar Returns</h2><div id="oos_wf_bar_rets"></div></div>
+      </div>
+      <div class="row">
+        <div class="box"><h2>Bar Returns Histogram</h2><div id="oos_wf_bar_hist"></div></div>
+        <div class="box"><h2>Run Metrics</h2><div id="oos_wf_metrics"></div></div>
+      </div>
+      <div class="col">
         <div class="box"><h2>Run Parameters</h2><div id="oos_wf_params"></div></div>
       </div>
     </div>
@@ -195,8 +206,6 @@
         { label: 'PF Net', value: fmt(metrics.pf_net, 3), good: Number(metrics.pf_net) >= 1.1 },
         { label: 'Sharpe Gross', value: fmt(metrics.sharpe_gross, 2), good: Number(metrics.sharpe_gross) >= 1.0 },
         { label: 'Sharpe Net', value: fmt(metrics.sharpe_net, 2), good: Number(metrics.sharpe_net) >= 1.0 },
-        { label: 'Gross Log Ret', value: p(metrics.pct_return_log_gross), good: Number(metrics.pct_return_log_gross) >= 0 },
-        { label: 'Net Log Ret', value: p(metrics.pct_return_log_net), good: Number(metrics.pct_return_log_net) >= 0 },
         { label: 'Gross Simple Ret', value: p(metrics.pct_return_simple_gross), good: Number(metrics.pct_return_simple_gross) >= 0 },
         { label: 'Net Simple Ret', value: p(metrics.pct_return_simple_net), good: Number(metrics.pct_return_simple_net) >= 0 },
         { label: 'Win rate (net)', value: p(metrics.win_rate_net_pct), good: Number(metrics.win_rate_net_pct) >= 50 },
@@ -204,8 +213,9 @@
         { label: 'Avg loss (net)', value: p(metrics.avg_loss_net_pct), good: Number(metrics.avg_loss_net_pct) > -1 },
         { label: 'Avg Turnover/day', value: fmt(metrics.avg_turnover_per_day, 2), good: true },
         { label: 'Avg Net DD', value: p(metrics.avg_net_drawdown_pct), good: Number(metrics.avg_net_drawdown_pct) >= -10 },
-        { label: 'VaR 95 (net, per-bar)', value: p(metrics.var95_net_pct), good: Number(metrics.var95_net_pct) >= -1 },
-        { label: 'CVaR 95 (net, per-bar)', value: p(metrics.cvar95_net_pct), good: Number(metrics.cvar95_net_pct) >= -1 },
+        { label: 'Max Net DD', value: p(metrics.max_net_drawdown_pct), good: Number(metrics.max_net_drawdown_pct) >= -30 },
+        { label: 'VaR 95 (per-bar, net)', value: p(metrics.var95_net_pct), good: Number(metrics.var95_net_pct) >= -1 },
+        { label: 'CVaR 95 (per-bar, net)', value: p(metrics.cvar95_net_pct), good: Number(metrics.cvar95_net_pct) >= -1 },
       ];
       el.innerHTML = items.map(it => `<div class="kpi ${it.good ? 'good' : 'bad'}"><div class="label">${it.label}</div><div class="value">${it.value}</div></div>`).join('');
     }
@@ -285,6 +295,17 @@
       const stratNet = data.series.strategy.net;
       const asset = data.series.asset;
       const m = data.metrics || {};
+
+      // Enrich metrics with Max Net Drawdown computed from drawdown series if not provided
+      try {
+        const dd = toFinite(stratNet && stratNet.drawdown ? stratNet.drawdown : []);
+        if (dd.length > 0) {
+          const mdd = Math.min.apply(null, dd);
+          if (!Number.isFinite(Number(m.max_net_drawdown_pct))) {
+            m.max_net_drawdown_pct = mdd * 100.0;
+          }
+        }
+      } catch (_) { /* noop */ }
 
       Plotly.newPlot('is_cum_log', [
         { x: ts, y: stratGross.cum_log, mode: 'lines', name: 'Strategy Gross (log)' },
@@ -396,7 +417,7 @@
       // also surface core win/loss stats near run metrics if present
       // no structural change needed as makeTable renders all metrics
       makeTable('is_params', data.params);
-      renderKpis('is_kpis', data.metrics);
+      renderKpis('is_kpis', m);
 
       // Turnover plot
       function movingAvg(arr, n) {
@@ -483,6 +504,9 @@
       const nPerm = (data.params && Number.isFinite(Number(data.params.n_perm)) ? Number(data.params.n_perm) : null);
       const legendName = (pfNet !== null && pVal !== null) ? `Real (net) PF = ${pfNet.toFixed(3)} | p = ${pVal.toFixed(3)}` : 'Real (net) PF';
 
+      const darkBg = '#0c0c0f';
+      const darkBorder = '#2a2a36';
+
       const series = (data && data.series) || {};
       const perms = toFinite(series.permutation_pfs_net || []);
       const bins = Math.max(12, Math.floor(perms.length / 4));
@@ -501,6 +525,8 @@
       }
       const layout = {
         template: 'plotly_dark', height: 380, margin: { t: 30, r: 10, l: 50, b: 40 },
+        // paper_bgcolor: darkBg,
+        // plot_bgcolor: darkBg,
         xaxis: { title: 'Net Profit Factor (Permutation)', gridcolor: '#2a2a36' },
         yaxis: { title: 'Count', gridcolor: '#2a2a36' },
         bargap: 0.05,
@@ -519,22 +545,135 @@
       const has = !!data;
       ensurePanelHasData('oos_wf', has);
       if (!has) return;
+
       const ts = data.series.timestamps;
-      const gross = data.series.strategy.gross;
-      const net = data.series.strategy.net;
-      Plotly.newPlot('oos_wf_cum', [
-        { x: ts, y: gross.cum_log, mode: 'lines', name: 'Gross' },
-        { x: ts, y: net.cum_log, mode: 'lines', name: 'Net' },
+      const stratGross = data.series.strategy.gross;
+      const stratNet = data.series.strategy.net;
+      const m = data.metrics || {};
+
+      // KPIs
+      renderKpis('oos_wf_kpis', m);
+
+      // Cumulative log
+      renderResponsivePlot('oos_wf_cum_log', [
+        { x: ts, y: stratGross.cum_log, mode: 'lines', name: 'Strategy Gross (log)' },
+        { x: ts, y: stratNet.cum_log, mode: 'lines', name: 'Strategy Net (log)' },
+        { x: ts, y: (data.series.asset && data.series.asset.cum_log) || [], mode: 'lines', name: 'Asset (log)', line: { dash: 'dot' } },
       ], { template: 'plotly_dark', height: 460, margin: { t: 30 }, xaxis: { title: 'Time' }, yaxis: { title: 'Cumulative log return' } });
-      Plotly.newPlot('oos_wf_dd', [
-        { x: ts, y: gross.drawdown, mode: 'lines', name: 'Gross DD' },
-        { x: ts, y: net.drawdown, mode: 'lines', name: 'Net DD' },
+      setupResize('oos_wf_cum_log');
+
+      // Cumulative simple (equity)
+      const equityGross = (stratGross.equity && stratGross.equity.length) ? stratGross.equity : toEquity(stratGross.cum_simple);
+      const equityNet = (stratNet.equity && stratNet.equity.length) ? stratNet.equity : toEquity(stratNet.cum_simple);
+      const equityAsset = (data.series.asset && data.series.asset.equity && data.series.asset.equity.length) ? data.series.asset.equity : toEquity((data.series.asset && data.series.asset.cum_simple) || []);
+      const cumSimpleTraces = [
+        { x: ts, y: equityGross, mode: 'lines', name: 'Strategy Gross (equity)' },
+        { x: ts, y: equityNet, mode: 'lines', name: 'Strategy Net (equity)' },
+        { x: ts, y: equityAsset, mode: 'lines', name: 'Asset (equity)', line: { dash: 'dot' } },
+      ];
+      const cumSimpleLayout = { template: 'plotly_dark', height: 460, margin: { t: 30 }, xaxis: { title: 'Time' }, yaxis: { title: 'Equity (start=1, min=0)' } };
+      renderResponsivePlot('oos_wf_cum_simple', cumSimpleTraces, cumSimpleLayout);
+      setupResize('oos_wf_cum_simple');
+      const oosCumEl = document.getElementById('oos_wf_cum_simple');
+      oosCumEl._equityGross = equityGross;
+      oosCumEl._equityNet = equityNet;
+      oosCumEl._equityAsset = equityAsset;
+
+      // Drawdown
+      renderResponsivePlot('oos_wf_dd', [
+        { x: ts, y: stratGross.drawdown, mode: 'lines', name: 'Gross DD', line: { color: '#5b8cff' }, fill: 'tozeroy', fillcolor: 'rgba(91,140,255,0.18)' },
+        { x: ts, y: stratNet.drawdown, mode: 'lines', name: 'Net DD', line: { color: '#ff9f43' }, fill: 'tozeroy', fillcolor: 'rgba(255,159,67,0.18)' },
       ], { template: 'plotly_dark', height: 460, margin: { t: 30 }, xaxis: { title: 'Time' }, yaxis: { title: 'Drawdown' } });
-      Plotly.newPlot('oos_wf_rolling', [
-        { x: ts, y: gross.rolling_sharpe, mode: 'lines', name: 'Gross' },
-        { x: ts, y: net.rolling_sharpe, mode: 'lines', name: 'Net' },
+      setupResize('oos_wf_dd');
+
+      // Rolling Sharpe
+      renderResponsivePlot('oos_wf_rolling', [
+        { x: ts, y: stratGross.rolling_sharpe, mode: 'lines', name: 'Gross' },
+        { x: ts, y: stratNet.rolling_sharpe, mode: 'lines', name: 'Net' },
       ], { template: 'plotly_dark', height: 360, margin: { t: 30 }, xaxis: { title: 'Time' }, yaxis: { title: 'Annualized Sharpe' } });
+      setupResize('oos_wf_rolling');
+
+      // Bar returns
+      renderResponsivePlot('oos_wf_bar_rets', [
+        { x: ts, y: stratGross.ret_log, mode: 'lines', name: 'Gross bar log ret', hovertemplate: 'Time: %{x}<br>Log return: %{y:.6f}<extra>Gross</extra>' },
+        { x: ts, y: stratNet.ret_log, mode: 'lines', name: 'Net bar log ret', hovertemplate: 'Time: %{x}<br>Log return: %{y:.6f}<extra>Net</extra>' },
+      ], { template: 'plotly_dark', height: 360, margin: { t: 30 }, xaxis: { title: 'Time' }, yaxis: { title: 'Bar log return' }, shapes: [ { type: 'line', x0: ts[0], x1: ts[ts.length-1], y0: 0, y1: 0, xref: 'x', yref: 'y', line: { color: '#777', dash: 'dot' } } ] });
+      setupResize('oos_wf_bar_rets');
+
+      // Histogram, same binning logic
+      const grossR = toFinite(stratGross.ret_log);
+      const netR = toFinite(stratNet.ret_log);
+      const combined = grossR.concat(netR);
+      let lo = quantile(combined, 0.01);
+      let hi = quantile(combined, 0.99);
+      if (!Number.isFinite(lo) || !Number.isFinite(hi) || lo === hi) { lo = -0.01; hi = 0.01; }
+      const binSize = Math.max((hi - lo) / 80, 1e-6);
+      const muGross = mean(grossR), sdGross = std(grossR);
+      const muNet = mean(netR), sdNet = std(netR);
+      renderResponsivePlot('oos_wf_bar_hist', [
+        { x: grossR, type: 'histogram', opacity: 0.6, name: 'Gross', histnorm: 'probability density', xbins: { start: lo, end: hi, size: binSize }, hovertemplate: 'Return: %{x:.6f}<br>Density: %{y:.3f}<extra>Gross</extra>' },
+        { x: netR, type: 'histogram', opacity: 0.6, name: 'Net', histnorm: 'probability density', xbins: { start: lo, end: hi, size: binSize }, hovertemplate: 'Return: %{x:.6f}<br>Density: %{y:.3f}<extra>Net</extra>' },
+      ], { template: 'plotly_dark', barmode: 'overlay', height: 360, margin: { t: 30 }, xaxis: { title: 'Bar log return', range: [lo, hi] }, yaxis: { title: 'Density' }, shapes: [ { type: 'line', x0: 0, x1: 0, y0: 0, y1: 1, xref: 'x', yref: 'paper', line: { color: '#777', dash: 'dot' } } ], annotations: [{ text: `Gross μ=${Number(muGross).toExponential(2)}, σ=${Number(sdGross).toExponential(2)}\nNet μ=${Number(muNet).toExponential(2)}, σ=${Number(sdNet).toExponential(2)}`, xref: 'paper', yref: 'paper', x: 1, y: 1, xanchor: 'right', yanchor: 'top', align: 'left', bgcolor: '#111', bordercolor: '#444', borderwidth: 1, opacity: 0.9, font: { size: 10 } }] });
+      setupResize('oos_wf_bar_hist');
+
+      // Turnover with MA control
+      function movingAvg(arr, n) {
+        const out = new Array(arr.length).fill(null);
+        let sum = 0;
+        for (let i = 0; i < arr.length; i++) {
+          const v = Number(arr[i]);
+          sum += Number.isFinite(v) ? v : 0;
+          if (i >= n) {
+            const drop = Number(arr[i - n]);
+            sum -= Number.isFinite(drop) ? drop : 0;
+          }
+          if (i >= n - 1) out[i] = sum / n;
+        }
+        return out;
+      }
+      const turnover = (data.series && data.series.turnover) || [];
+      const tfStr = (data.params && data.params.timeframe) || '1h';
+      const bpd = barsPerDayFromTimeframe(tfStr);
+      let maDays = parseInt((document.getElementById('turnoverMaInput') && document.getElementById('turnoverMaInput').value) || '0', 10);
+      if (!Number.isFinite(maDays) || maDays <= 0) { maDays = 30; }
+      const maBars = Math.max(1, Math.round(maDays * bpd));
+      const turnoverMA = movingAvg(turnover, maBars);
+      renderResponsivePlot('oos_wf_turnover', [
+        { x: ts, y: turnover, mode: 'lines', name: 'Turnover (per bar)', line: { color: '#888', width: 1 }, opacity: 0.6 },
+        { x: ts, y: turnoverMA, mode: 'lines', name: `Turnover MA(${maDays}d)`, line: { color: '#5b8cff', width: 2 } },
+      ], { template: 'plotly_dark', height: 360, margin: { t: 30 }, xaxis: { title: 'Time' }, yaxis: { title: 'Turnover' } });
+      setupResize('oos_wf_turnover');
+
+      // Tables
+      makeTable('oos_wf_metrics', data.metrics);
       makeTable('oos_wf_params', data.params);
+
+      // Toggle button wiring for OOS cumulative simple plot
+      const toggleBtn = document.getElementById('toggle_oos_cum_simple');
+      if (toggleBtn && !toggleBtn.dataset.wired) {
+        toggleBtn.dataset.wired = '1';
+        toggleBtn.dataset.scale = 'linear';
+        toggleBtn.addEventListener('click', () => {
+          const next = toggleBtn.dataset.scale === 'linear' ? 'log' : 'linear';
+          const el = document.getElementById('oos_wf_cum_simple');
+          if (next === 'log') {
+            Plotly.restyle('oos_wf_cum_simple', { y: [
+              clampPositive(el._equityGross),
+              clampPositive(el._equityNet),
+              clampPositive(el._equityAsset)
+            ]});
+          } else {
+            Plotly.restyle('oos_wf_cum_simple', { y: [
+              el._equityGross,
+              el._equityNet,
+              el._equityAsset
+            ]});
+          }
+          Plotly.relayout('oos_wf_cum_simple', { 'yaxis.type': next });
+          toggleBtn.dataset.scale = next;
+          toggleBtn.textContent = next === 'linear' ? 'Log scale' : 'Linear scale';
+        });
+      }
     }
 
     function plotOOSWFMC(data) {
