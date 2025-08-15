@@ -178,6 +178,8 @@ class InSampleMCTester:
         strategy_kwargs: dict | None = None,
         fee_bps: float = 0.0,
         slippage_bps: float = 0.0,
+        position_sizing_mode: str = "full_notional",
+        position_sizing_params: dict | None = None,
     ) -> None:
         self.start_date = start_date
         self.end_date = end_date
@@ -192,6 +194,8 @@ class InSampleMCTester:
         self.fee_bps = fee_bps
         self.slippage_bps = slippage_bps
         self.save_json_dir: str | None = None
+        self.position_sizing_mode = position_sizing_mode
+        self.position_sizing_params = position_sizing_params or {}
 
         if strategy_name not in aVAILABLE_STRATEGIES:
             raise ValueError(
@@ -247,12 +251,20 @@ class InSampleMCTester:
         train_df["r"] = np.log(train_df[self.price_column]).diff().shift(-1)
         train_df["simple_r"] = train_df[self.price_column].pct_change().shift(-1)
         train_df["signal"] = real_signals
-        train_df["strategy_r"] = train_df["r"] * train_df["signal"]
-        train_df["strategy_simple_r"] = train_df["simple_r"] * train_df["signal"]
+        train_df["weight"] = compute_position_weights(
+            signals=train_df["signal"],
+            simple_returns=train_df["simple_r"],
+            price=train_df[self.price_column],
+            timeframe=self.timeframe,
+            mode=self.position_sizing_mode,
+            mode_params=self.position_sizing_params,
+        )
+        train_df["strategy_r"] = train_df["r"] * train_df["weight"]
+        train_df["strategy_simple_r"] = train_df["simple_r"] * train_df["weight"]
 
         # Fees and slippage
         fee_rate = (self.fee_bps + self.slippage_bps) / 10000.0
-        turnover = (train_df["signal"].diff().abs()).fillna(train_df["signal"].abs())
+        turnover = (train_df["weight"].diff().abs()).fillna(train_df["weight"].abs())
         train_df["cost_simple"] = fee_rate * turnover
         train_df["strategy_simple_r_net"] = train_df["strategy_simple_r"] - train_df["cost_simple"]
         train_df["strategy_r_net"] = np.log((1.0 + train_df["strategy_simple_r_net"]).clip(lower=1e-12))
@@ -283,6 +295,8 @@ class InSampleMCTester:
                         repeat(self.fee_bps),
                         repeat(self.slippage_bps),
                         repeat(self.perm_start_index),
+                        repeat(self.position_sizing_mode),
+                        repeat(self.position_sizing_params),
                     ),
                     total=len(seeds),
                 )
@@ -430,7 +444,7 @@ if __name__ == "__main__":
     # }
 
 
-    from is_results import ml_params, ml_params_conservative, ml_params_geminipro25, ml_params_deepseekR1, ml_params_kimiK2, ml_params_claudesonnet4
+    from is_results import ml_params, ml_params_geminipro25, ml_params_deepseekR1, ml_params_kimiK2, ml_params_claudesonnet4
 
 
     tester = InSampleMCTester(
@@ -439,14 +453,18 @@ if __name__ == "__main__":
         strategy_name="ml",
         asset="VETUSD",
         timeframe="4h",
-        n_perm=50,
+        n_perm=100,
         generate_plot=True,
         # strategy_kwargs=ml_params,
         # strategy_kwargs=ml_params_conservative,
         # strategy_kwargs=ml_params_mc_safe,
-        strategy_kwargs=ml_params_deepseekR1,
+        strategy_kwargs=ml_params,
         price_column="vwap",
         fee_bps=10.0,
         slippage_bps=10.0,
+        position_sizing_mode="fixed_fraction",
+        position_sizing_params={
+            "fraction": 0.1,
+        },        
     )
     tester.run(save_json_dir="reports/example_run")
