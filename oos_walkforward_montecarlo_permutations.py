@@ -209,7 +209,12 @@ class WalkForwardMCTester:
         return Path(f"data/ohlcv_{self.asset}_{self.timeframe}.parquet")
 
     def _load_raw(self) -> pd.DataFrame:
-        return pd.read_parquet(self._get_full_filepath())
+        df = pd.read_parquet(self._get_full_filepath())
+        if not isinstance(df.index, pd.DatetimeIndex):
+            df.index = pd.to_datetime(df.index, errors="coerce")
+        if getattr(df.index, "tz", None) is not None:
+            df.index = df.index.tz_convert("UTC").tz_localize(None)
+        return df
 
     def get_df(self) -> pd.DataFrame:
         df = self._load_raw()
@@ -263,8 +268,9 @@ class WalkForwardMCTester:
 
     def _get_perm_start_index(self, start_date: str) -> int:
         full_df = self._load_raw()
-        start_date_parsed = pd.to_datetime(start_date, utc=True)
-        analysis_start_idx = full_df.index.get_loc(start_date_parsed)
+        idx = full_df.index
+        start_ts = pd.to_datetime(start_date)
+        analysis_start_idx = int(idx.searchsorted(start_ts, side="left"))
         perm_start_idx = max(0, analysis_start_idx - self.train_lookback)
         return perm_start_idx
 

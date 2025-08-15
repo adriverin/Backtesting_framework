@@ -178,14 +178,24 @@ class WalkForward:
         return Path(f"data/ohlcv_{self.asset}_{self.timeframe}.parquet")
 
     def _load_raw(self) -> pd.DataFrame:
-        return pd.read_parquet(self._get_full_filepath())
+        df = pd.read_parquet(self._get_full_filepath())
+        # Ensure datetime index exists and is UTC-naive to match cached files
+        if not isinstance(df.index, pd.DatetimeIndex):
+            df.index = pd.to_datetime(df.index, errors="coerce")
+        # If any timezone present, convert to UTC then drop tz info
+        if getattr(df.index, "tz", None) is not None:
+            df.index = df.index.tz_convert("UTC").tz_localize(None)
+        return df
 
     def get_df(self) -> pd.DataFrame:
-        # df = self._load_raw()
-        # return df[(df.index >= self.start_date) & (df.index < self.end_date)]
         full_df = self._load_raw()
-        analysis_start = full_df.index.get_loc(pd.to_datetime(self.start_date, utc=True))
-        analysis_end = full_df.index.get_loc(pd.to_datetime(self.end_date, utc=True))
+        idx = full_df.index
+        # Parse as tz-naive to match cached data
+        start_ts = pd.to_datetime(self.start_date)
+        end_ts = pd.to_datetime(self.end_date)
+        # Get left-bound positions even if exact timestamps are missing
+        analysis_start = int(idx.searchsorted(start_ts, side="left"))
+        analysis_end = int(idx.searchsorted(end_ts, side="left"))
         slice_start = max(0, analysis_start - self.train_lookback)
         return full_df.iloc[slice_start:analysis_end]
 
@@ -297,7 +307,9 @@ class WalkForward:
         real_df["strategy_r_net"] = np.log((1.0 + real_df["strategy_simple_r_net"]).clip(lower=1e-12))
 
         # Trim to analysis window and drop trailing NaNs from shift/diff so plots don't jump at the end
-        real_df = real_df[(real_df.index >= self.start_date) & (real_df.index < self.end_date)]
+        _start_ts = pd.to_datetime(self.start_date)
+        _end_ts = pd.to_datetime(self.end_date)
+        real_df = real_df[(real_df.index >= _start_ts) & (real_df.index < _end_ts)]
         real_df = real_df.dropna(subset=["r", "strategy_r"])  # match IS behaviour to avoid last-point jumps
 
         # Diagnostics: detect if no OOS iterations executed (all signals stayed NaN/0)
@@ -372,6 +384,8 @@ class WalkForward:
         print(f"OOS real Sharpe Ratio (gross)  : {sr_gross:.2f}")
         print(f"OOS real Sharpe Ratio (net)    : {sr_net:.2f}")
         print("=" * 100)
+        print("")
+        print("")
         print("")
 
         if self.generate_plot:
@@ -585,7 +599,7 @@ if __name__ == "__main__":
 
     tester = WalkForward(
         start_date="2025-01-01",
-        end_date="2025-07-01",
+        end_date="2025-08-01",
         strategy_name="ml",
         asset="VETUSD",
         timeframe=_tf,
@@ -598,7 +612,7 @@ if __name__ == "__main__":
         slippage_bps=10.0,
         position_sizing_mode="fixed_fraction",
         position_sizing_params={
-            "fraction": 0.5,
+            "fraction": 0.05,
         },        
     )
     tester.run(save_json_dir="reports/example_run")
