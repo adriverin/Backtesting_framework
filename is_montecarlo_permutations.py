@@ -124,6 +124,11 @@ def _compute_single_perm_pf_net(
 ) -> float:
     full_fp = Path(f"data/ohlcv_{asset}_{timeframe}.parquet")
     full_df = pd.read_parquet(full_fp)
+    # Normalize to UTC-naive to avoid tz-aware comparisons downstream
+    if not isinstance(full_df.index, pd.DatetimeIndex):
+        full_df.index = pd.to_datetime(full_df.index, errors="coerce")
+    if getattr(full_df.index, "tz", None) is not None:
+        full_df.index = full_df.index.tz_convert("UTC").tz_localize(None)
     from permutations import get_permutation  # local import for subprocess
 
     perm_df = get_permutation(full_df, start_index=perm_start_index, seed=seed)
@@ -213,7 +218,12 @@ class InSampleMCTester:
         return Path(f"data/ohlcv_{self.asset}_{self.timeframe}.parquet")
 
     def _load_raw(self) -> pd.DataFrame:
-        return pd.read_parquet(self._get_full_filepath())
+        df = pd.read_parquet(self._get_full_filepath())
+        if not isinstance(df.index, pd.DatetimeIndex):
+            df.index = pd.to_datetime(df.index, errors="coerce")
+        if getattr(df.index, "tz", None) is not None:
+            df.index = df.index.tz_convert("UTC").tz_localize(None)
+        return df
 
     def get_df(self) -> pd.DataFrame:
         df = self._load_raw()

@@ -167,7 +167,7 @@ def create_maximum_cache_for_assets(
         "assets": {},
     }
 
-    cache_dir = Path("data")
+    cache_dir = Path("")
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     rule_str, expected_delta = _interval_to_pandas_rule(interval)
@@ -188,10 +188,69 @@ def create_maximum_cache_for_assets(
                     df_existing = None
 
             if df_existing is not None and not df_existing.empty:
+                # Normalize existing index to UTC-naive to avoid tz-aware/naive comparison issues
+                try:
+                    if not isinstance(df_existing.index, pd.DatetimeIndex):
+                        df_existing.index = pd.to_datetime(df_existing.index, utc=True, errors="coerce")
+                    if getattr(df_existing.index, "tz", None) is not None:
+                        df_existing.index = df_existing.index.tz_convert("UTC").tz_localize(None)
+                except Exception:
+                    pass
                 last_idx: pd.Timestamp = pd.to_datetime(df_existing.index.max())
-                # Start from the last saved bar (ccxt returns exact bar sizes)
-                buffer = pd.Timedelta(0)
-                effective_start_dt = max(pd.to_datetime(start), last_idx - buffer)
+                # Start strictly after the last saved bar to avoid refetching duplicates
+                _, expected_delta = _interval_to_pandas_rule(interval)
+                effective_start_dt = max(pd.to_datetime(start), last_idx + expected_delta)
+                # If we already have data up to (or beyond) the requested end, skip fetching
+                if effective_start_dt >= pd.to_datetime(end):
+                    df = df_existing
+                    if df is not None and not df.empty:
+                        df.to_parquet(cache_file)
+
+                        actual_start = df.index.min()
+                        actual_end = df.index.max()
+                        actual_start_str = actual_start.strftime("%Y-%m-%d")
+                        actual_end_str = actual_end.strftime("%Y-%m-%d")
+
+                        # Data coverage and gap metrics
+                        rule_str, expected_delta = _interval_to_pandas_rule(interval)
+                        if len(df) > 1:
+                            time_diffs = df.index.to_series().diff().dropna()
+                            large_gaps = int((time_diffs > expected_delta * 2).sum())
+                        else:
+                            large_gaps = 0
+
+                        total_expected = 0
+                        if pd.notna(actual_start) and pd.notna(actual_end) and actual_end > actual_start:
+                            total_expected = int(((actual_end - actual_start) / expected_delta))
+                        coverage_pct = (len(df) / total_expected * 100.0) if total_expected > 0 else 0.0
+
+                        info = {
+                            "status": "success",
+                            "cache_type": "ohlcv",
+                            "available_from": actual_start_str,
+                            "available_to": actual_end_str,
+                            "total_bars": int(len(df)),
+                            "data_coverage_pct": round(float(coverage_pct), 2),
+                            "large_gaps_detected": int(large_gaps),
+                            "trading_days": int((actual_end - actual_start).days) if len(df) else 0,
+                            "ohlcv_columns": list(df.columns),
+                            "cache_file": f"ohlcv_{symbol_file}_{interval}.parquet",
+                        }
+
+                        asset_info[asset] = info
+                        cache_stats["successful_assets"] += 1
+                        cache_stats["assets"][asset] = info
+
+                        print(f"✅ {asset}: up to date (no new bars to fetch)")
+                        print(f"   📅 Available: {actual_start_str} to {actual_end_str}")
+                        print(f"   📈 Columns: {list(df.columns)}")
+                    else:
+                        info = {"status": "no_data", "error": "No OHLCV data returned"}
+                        asset_info[asset] = info
+                        cache_stats["failed_assets"] += 1
+                        cache_stats["assets"][asset] = info
+                        print(f"⚠️  {asset}: No OHLCV data available")
+                    continue
                 effective_start = effective_start_dt.strftime("%Y-%m-%d %H:%M:%S")
             else:
                 effective_start = start
@@ -313,7 +372,8 @@ def create_maximum_cache_for_assets(
 
 
 if __name__ == "__main__":
-    time_intervals = ["1m", "5m", "15m", "4h", "1d"]
+    # time_intervals = ["1m", "5m", "15m", "4h", "1d"]
+    time_intervals = ["1h", "4h", "1d"]
 
     for tf in time_intervals:
         print(f"Getting max cached for {tf}")

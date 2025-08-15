@@ -186,6 +186,11 @@ def plot_cumulative_returns(
     if not filepath.exists():
         raise FileNotFoundError(filepath)
     df = pd.read_parquet(filepath)
+    # Normalize index to UTC-naive for robust comparisons
+    if not isinstance(df.index, pd.DatetimeIndex):
+        df.index = pd.to_datetime(df.index, errors="coerce")
+    if getattr(df.index, "tz", None) is not None:
+        df.index = df.index.tz_convert("UTC").tz_localize(None)
     df = df[(df.index >= start_date) & (df.index < end_date)].copy()
 
     if len(df) == 0:
