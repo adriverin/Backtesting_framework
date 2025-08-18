@@ -291,10 +291,18 @@ def plot_cumulative_returns(
         win_rate_net_pct = float(len(wins) / denom * 100.0) if denom > 0 else float("nan")
         avg_win_net_pct = float(wins.mean() * 100.0) if len(wins) > 0 else float("nan")
         avg_loss_net_pct = float(losses.mean() * 100.0) if len(losses) > 0 else float("nan")
+        num_trades = denom
+        try:
+            wr_frac = (len(wins) / denom) if denom > 0 else float("nan")
+            expectancy_tharp_net_pct = float(wr_frac * (avg_win_net_pct) + (1.0 - wr_frac) * (avg_loss_net_pct)) if np.isfinite(wr_frac) else float("nan")
+        except Exception:
+            expectancy_tharp_net_pct = float("nan")
     else:
         win_rate_net_pct = float("nan")
         avg_win_net_pct = float("nan")
         avg_loss_net_pct = float("nan")
+        num_trades = 0
+        expectancy_tharp_net_pct = float("nan")
 
     # Diagnostics for costs/turnover
     # Estimate bars per day from timeframe
@@ -450,6 +458,8 @@ def plot_cumulative_returns(
                 "win_rate_net_pct": win_rate_net_pct,
                 "avg_win_net_pct": avg_win_net_pct,
                 "avg_loss_net_pct": avg_loss_net_pct,
+                "num_trades": int(num_trades),
+                "expectancy_tharp_net_pct": float(expectancy_tharp_net_pct),
             },
             "series": {
                 "timestamps": [ts.isoformat() for ts in df.index.to_pydatetime()],
@@ -695,7 +705,7 @@ if __name__ == "__main__":
         timeframe="4h",
         show_plot=False,
         strategy_kwargs=ml_params,
-        price_column="vwap_20",
+        price_column="vwap_10",
         fee_bps=10.0,
         slippage_bps=10.0,
         save_json_dir="reports/example_run",

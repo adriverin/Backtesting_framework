@@ -201,11 +201,16 @@
       if (!metrics) { el.innerHTML = '<i>No data</i>'; return; }
       const fmt = (v, d=2) => Number.isFinite(Number(v)) ? Number(v).toFixed(d) : '-';
       const p = (v) => Number.isFinite(Number(v)) ? `${Number(v).toFixed(2)}%` : '-';
+      const intStr = (v) => Number.isFinite(Number(v)) ? String(Math.round(Number(v))) : '-';
       const items = [
         { label: 'PF Gross', value: fmt(metrics.pf_gross, 3), good: Number(metrics.pf_gross) >= 1.2 },
         { label: 'PF Net', value: fmt(metrics.pf_net, 3), good: Number(metrics.pf_net) >= 1.1 },
         { label: 'Sharpe Gross', value: fmt(metrics.sharpe_gross, 2), good: Number(metrics.sharpe_gross) >= 1.0 },
         { label: 'Sharpe Net', value: fmt(metrics.sharpe_net, 2), good: Number(metrics.sharpe_net) >= 1.0 },
+        { label: 'Expectancy (Tharp, net)', value: p(metrics.expectancy_tharp_net_pct), good: Number(metrics.expectancy_tharp_net_pct) >= 0 },
+        { label: 'Calmar Gross', value: fmt(metrics.calmar_gross, 2), good: Number(metrics.calmar_gross) >= 0.5 },
+        { label: 'Calmar Net', value: fmt(metrics.calmar_net, 2), good: Number(metrics.calmar_net) >= 0.5 },
+        { label: 'Trades', value: intStr(metrics.num_trades), good: true },
         { label: 'Gross Simple Ret', value: p(metrics.pct_return_simple_gross), good: Number(metrics.pct_return_simple_gross) >= 0 },
         { label: 'Net Simple Ret', value: p(metrics.pct_return_simple_net), good: Number(metrics.pct_return_simple_net) >= 0 },
         { label: 'Win rate (net)', value: p(metrics.win_rate_net_pct), good: Number(metrics.win_rate_net_pct) >= 50 },
@@ -324,6 +329,55 @@
       const equityGross = (stratGross.equity && stratGross.equity.length) ? stratGross.equity : toEquity(stratGross.cum_simple);
       const equityNet = (stratNet.equity && stratNet.equity.length) ? stratNet.equity : toEquity(stratNet.cum_simple);
       const equityAsset = (asset.equity && asset.equity.length) ? asset.equity : toEquity(asset.cum_simple);
+      // Enrich KPIs: Expectancy (Tharp, net), Calmar ratios, Trades
+      try {
+        const wr = Number(m.win_rate_net_pct);
+        const aw = Number(m.avg_win_net_pct);
+        const al = Number(m.avg_loss_net_pct);
+        if (Number.isFinite(wr) && Number.isFinite(aw) && Number.isFinite(al)) {
+          const wrFrac = Math.max(0, Math.min(1, wr / 100.0));
+          m.expectancy_tharp_net_pct = wrFrac * aw + (1 - wrFrac) * al;
+        }
+      } catch (_) { /* noop */ }
+      try {
+        const t0 = ts && ts.length ? new Date(ts[0]).getTime() : NaN;
+        const t1 = ts && ts.length ? new Date(ts[ts.length - 1]).getTime() : NaN;
+        const years = Number.isFinite(t0) && Number.isFinite(t1) && t1 > t0 ? (t1 - t0) / (365.25 * 24 * 3600 * 1000) : NaN;
+        const egLast = equityGross && equityGross.length ? Number(equityGross[equityGross.length - 1]) : NaN;
+        const enLast = equityNet && equityNet.length ? Number(equityNet[equityNet.length - 1]) : NaN;
+        const mddGross = stratGross && Array.isArray(stratGross.drawdown) && stratGross.drawdown.length ? Math.abs(Math.min.apply(null, stratGross.drawdown.map(Number))) : NaN;
+        const mddNet = stratNet && Array.isArray(stratNet.drawdown) && stratNet.drawdown.length ? Math.abs(Math.min.apply(null, stratNet.drawdown.map(Number))) : NaN;
+        if (Number.isFinite(years) && years > 0 && Number.isFinite(egLast) && egLast > 0 && Number.isFinite(mddGross) && mddGross > 0) {
+          const cagrGross = Math.pow(egLast, 1 / years) - 1;
+          m.calmar_gross = cagrGross / mddGross;
+        }
+        if (Number.isFinite(years) && years > 0 && Number.isFinite(enLast) && enLast > 0 && Number.isFinite(mddNet) && mddNet > 0) {
+          const cagrNet = Math.pow(enLast, 1 / years) - 1;
+          m.calmar_net = cagrNet / mddNet;
+        }
+      } catch (_) { /* noop */ }
+      try {
+        const assetSimple = (asset && Array.isArray(asset.ret_simple)) ? asset.ret_simple.map(Number) : [];
+        const grossLog = (stratGross && Array.isArray(stratGross.ret_log)) ? stratGross.ret_log.map(Number) : [];
+        const grossSimple = grossLog.map(v => Number.isFinite(v) ? Math.expm1(v) : 0);
+        const n = Math.min(assetSimple.length, grossSimple.length);
+        let lastSign = 0, segments = 0;
+        const EPS_DEN = 1e-9, EPS_W = 1e-3, EPS_SMPL = 1e-9;
+        for (let i = 0; i < n; i++) {
+          const den = assetSimple[i];
+          const sg = grossSimple[i];
+          let sign = 0;
+          if (Number.isFinite(den) && Math.abs(den) >= EPS_DEN) {
+            const w = sg / den;
+            if (Number.isFinite(w) && Math.abs(w) > EPS_W) sign = w > 0 ? 1 : -1;
+          } else if (Number.isFinite(sg) && Math.abs(sg) < EPS_SMPL) {
+            sign = 0; // flat bar
+          }
+          if (sign !== 0 && sign !== lastSign) segments += 1; // entry or reversal
+          if (sign === 0) lastSign = 0; else lastSign = sign;
+        }
+        if (segments > 0) m.num_trades = segments;
+      } catch (_) { /* noop */ }
       const cumSimpleTraces = [
         { x: ts, y: equityGross, mode: 'lines', name: 'Strategy Gross (equity)' },
         { x: ts, y: equityNet, mode: 'lines', name: 'Strategy Net (equity)' },
@@ -551,8 +605,7 @@
       const stratNet = data.series.strategy.net;
       const m = data.metrics || {};
 
-      // KPIs
-      renderKpis('oos_wf_kpis', m);
+      // KPIs will be rendered after enrichment below
 
       // Cumulative log
       renderResponsivePlot('oos_wf_cum_log', [
@@ -585,6 +638,77 @@
         { x: ts, y: stratNet.drawdown, mode: 'lines', name: 'Net DD', line: { color: '#ff9f43' }, fill: 'tozeroy', fillcolor: 'rgba(255,159,67,0.18)' },
       ], { template: 'plotly_dark', height: 460, margin: { t: 30 }, xaxis: { title: 'Time' }, yaxis: { title: 'Drawdown' } });
       setupResize('oos_wf_dd');
+
+      // Enrich KPIs: Expectancy (Tharp, net), Calmar ratios, Trades
+      try {
+        const wr = Number(m.win_rate_net_pct);
+        const aw = Number(m.avg_win_net_pct);
+        const al = Number(m.avg_loss_net_pct);
+        if (Number.isFinite(wr) && Number.isFinite(aw) && Number.isFinite(al)) {
+          const wrFrac = Math.max(0, Math.min(1, wr / 100.0));
+          m.expectancy_tharp_net_pct = wrFrac * aw + (1 - wrFrac) * al;
+        }
+      } catch (_) { /* noop */ }
+      try {
+        const t0 = ts && ts.length ? new Date(ts[0]).getTime() : NaN;
+        const t1 = ts && ts.length ? new Date(ts[ts.length - 1]).getTime() : NaN;
+        const years = Number.isFinite(t0) && Number.isFinite(t1) && t1 > t0 ? (t1 - t0) / (365.25 * 24 * 3600 * 1000) : NaN;
+        const egLast = equityGross && equityGross.length ? Number(equityGross[equityGross.length - 1]) : NaN;
+        const enLast = equityNet && equityNet.length ? Number(equityNet[equityNet.length - 1]) : NaN;
+        const mddGross = stratGross && Array.isArray(stratGross.drawdown) && stratGross.drawdown.length ? Math.abs(Math.min.apply(null, stratGross.drawdown.map(Number))) : NaN;
+        const mddNet = stratNet && Array.isArray(stratNet.drawdown) && stratNet.drawdown.length ? Math.abs(Math.min.apply(null, stratNet.drawdown.map(Number))) : NaN;
+        if (Number.isFinite(years) && years > 0 && Number.isFinite(egLast) && egLast > 0 && Number.isFinite(mddGross) && mddGross > 0) {
+          const cagrGross = Math.pow(egLast, 1 / years) - 1;
+          m.calmar_gross = cagrGross / mddGross;
+        }
+        if (Number.isFinite(years) && years > 0 && Number.isFinite(enLast) && enLast > 0 && Number.isFinite(mddNet) && mddNet > 0) {
+          const cagrNet = Math.pow(enLast, 1 / years) - 1;
+          m.calmar_net = cagrNet / mddNet;
+        }
+      } catch (_) { /* noop */ }
+      try {
+        const assetSimple = (data.series && data.series.asset && Array.isArray(data.series.asset.ret_simple)) ? data.series.asset.ret_simple.map(Number) : [];
+        const grossLog = (stratGross && Array.isArray(stratGross.ret_log)) ? stratGross.ret_log.map(Number) : [];
+        const grossSimple = grossLog.map(v => Number.isFinite(v) ? Math.expm1(v) : 0);
+        const n = Math.min(assetSimple.length, grossSimple.length);
+        let lastSign = 0, segments = 0;
+        const EPS_DEN = 1e-9, EPS_W = 1e-3, EPS_SMPL = 1e-9;
+        for (let i = 0; i < n; i++) {
+          const den = assetSimple[i];
+          const sg = grossSimple[i];
+          let sign = 0;
+          if (Number.isFinite(den) && Math.abs(den) >= EPS_DEN) {
+            const w = sg / den;
+            if (Number.isFinite(w) && Math.abs(w) > EPS_W) sign = w > 0 ? 1 : -1;
+          } else if (Number.isFinite(sg) && Math.abs(sg) < EPS_SMPL) {
+            sign = 0;
+          }
+          if (sign !== 0 && sign !== lastSign) segments += 1;
+          if (sign === 0) lastSign = 0; else lastSign = sign;
+        }
+        if (segments > 0) m.num_trades = segments;
+      } catch (_) { /* noop */ }
+
+      // Try to override with exact trade count from CSV if available
+      try {
+        const folder = (window && window._currentFolder) ? window._currentFolder : null;
+        if (folder) {
+          fetch(`${folder}/oos_wf_trades.csv?t=${Date.now()}`)
+            .then(r => r.ok ? r.text() : Promise.reject(new Error('no csv')))
+            .then(txt => {
+              const lines = (txt || '').trim().split(/\r?\n/);
+              const count = lines.length > 1 ? (lines.length - 1) : 0; // minus header
+              if (count > 0) {
+                m.num_trades = count;
+                renderKpis('oos_wf_kpis', m);
+              }
+            })
+            .catch(() => {});
+        }
+      } catch (_) { /* noop */ }
+
+      // KPIs (after enrichment; CSV override may update it again asynchronously)
+      renderKpis('oos_wf_kpis', m);
 
       // Rolling Sharpe
       renderResponsivePlot('oos_wf_rolling', [
@@ -750,6 +874,7 @@
 
     async function loadAll() {
       const folder = document.getElementById('folderInput').value;
+      try { window._currentFolder = folder; } catch (_) {}
       const [isData, isMC, oosWF, oosWFMC] = await Promise.all([
         safeFetch(`${folder}/is.json`),
         safeFetch(`${folder}/is_mc.json`),

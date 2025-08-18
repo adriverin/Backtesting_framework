@@ -1,7 +1,7 @@
 Cryptocurrency Asset OHLCV Cache Summary
 =========================================
 
-Created: 2025-07-18T22:22:39.167161
+Created: 2025-08-15T15:31:39.429298
 Cache Type: OHLCV (Open, High, Low, Close, Volume)
 Interval: 5m
 Requested Range: 2010-01-01 to 2030-12-31
@@ -15,285 +15,285 @@ Asset Details:
 BTC-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2017-08-17 to 2025-07-18
-  Bars: 831,379
-  Coverage: 1197.54%
-  Trading Days: 2,892
-  Gaps: 4
-  Columns: open, high, low, close, volume
+  Available: 2017-08-17 to 2025-08-15
+  Bars: 839,360
+  Coverage: 99.8%
+  Trading Days: 2,920
+  Gaps: 33
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_BTCUSD_5m.parquet
 
 ETH-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2017-08-17 to 2025-07-18
-  Bars: 831,380
-  Coverage: 1197.54%
-  Trading Days: 2,892
-  Gaps: 4
-  Columns: open, high, low, close, volume
+  Available: 2017-08-17 to 2025-08-15
+  Bars: 839,360
+  Coverage: 99.8%
+  Trading Days: 2,920
+  Gaps: 33
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_ETHUSD_5m.parquet
 
 SOL-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2020-08-11 to 2025-07-18
-  Bars: 518,864
-  Coverage: 1199.35%
-  Trading Days: 1,802
-  Gaps: 0
-  Columns: open, high, low, close, volume
+  Available: 2020-08-11 to 2025-08-15
+  Bars: 526,844
+  Coverage: 99.95%
+  Trading Days: 1,830
+  Gaps: 10
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_SOLUSD_5m.parquet
 
 ADA-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2018-04-17 to 2025-07-18
-  Bars: 761,936
-  Coverage: 1198.16%
-  Trading Days: 2,649
-  Gaps: 3
-  Columns: open, high, low, close, volume
+  Available: 2018-04-17 to 2025-08-15
+  Bars: 769,915
+  Coverage: 99.85%
+  Trading Days: 2,677
+  Gaps: 26
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_ADAUSD_5m.parquet
 
 AVAX-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2020-09-22 to 2025-07-18
-  Bars: 506,764
-  Coverage: 1199.33%
-  Trading Days: 1,760
-  Gaps: 0
-  Columns: open, high, low, close, volume
+  Available: 2020-09-22 to 2025-08-15
+  Bars: 514,742
+  Coverage: 99.94%
+  Trading Days: 1,788
+  Gaps: 10
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_AVAXUSD_5m.parquet
 
 BNB-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2017-11-06 to 2025-07-18
-  Bars: 808,140
-  Coverage: 1197.6%
-  Trading Days: 2,811
-  Gaps: 4
-  Columns: open, high, low, close, volume
+  Available: 2017-11-06 to 2025-08-15
+  Bars: 816,117
+  Coverage: 99.8%
+  Trading Days: 2,839
+  Gaps: 32
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_BNBUSD_5m.parquet
 
 XRP-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2018-05-04 to 2025-07-18
-  Bars: 756,992
-  Coverage: 1198.15%
-  Trading Days: 2,632
-  Gaps: 3
-  Columns: open, high, low, close, volume
+  Available: 2018-05-04 to 2025-08-15
+  Bars: 764,969
+  Coverage: 99.85%
+  Trading Days: 2,660
+  Gaps: 26
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_XRPUSD_5m.parquet
 
 LTC-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2017-12-13 to 2025-07-18
-  Bars: 797,497
-  Coverage: 1197.57%
-  Trading Days: 2,774
-  Gaps: 4
-  Columns: open, high, low, close, volume
+  Available: 2017-12-13 to 2025-08-15
+  Bars: 805,473
+  Coverage: 99.8%
+  Trading Days: 2,802
+  Gaps: 31
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_LTCUSD_5m.parquet
 
 LINK-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2019-01-16 to 2025-07-18
-  Bars: 683,314
-  Coverage: 1198.59%
-  Trading Days: 2,375
-  Gaps: 2
-  Columns: open, high, low, close, volume
+  Available: 2019-01-16 to 2025-08-15
+  Bars: 691,289
+  Coverage: 99.88%
+  Trading Days: 2,403
+  Gaps: 21
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_LINKUSD_5m.parquet
 
 XLM-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2018-05-31 to 2025-07-18
-  Bars: 749,203
-  Coverage: 1198.13%
-  Trading Days: 2,605
-  Gaps: 3
-  Columns: open, high, low, close, volume
+  Available: 2018-05-31 to 2025-08-15
+  Bars: 757,177
+  Coverage: 99.85%
+  Trading Days: 2,633
+  Gaps: 26
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_XLMUSD_5m.parquet
 
 ATOM-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2019-04-29 to 2025-07-18
-  Bars: 653,795
-  Coverage: 1198.63%
-  Trading Days: 2,272
-  Gaps: 2
-  Columns: open, high, low, close, volume
+  Available: 2019-04-29 to 2025-08-15
+  Bars: 661,769
+  Coverage: 99.89%
+  Trading Days: 2,300
+  Gaps: 20
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_ATOMUSD_5m.parquet
 
 HBAR-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2019-09-29 to 2025-07-18
-  Bars: 609,960
-  Coverage: 1198.99%
-  Trading Days: 2,119
-  Gaps: 0
-  Columns: open, high, low, close, volume
+  Available: 2019-09-29 to 2025-08-15
+  Bars: 617,933
+  Coverage: 99.92%
+  Trading Days: 2,147
+  Gaps: 17
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_HBARUSD_5m.parquet
 
 BCH-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2019-11-28 to 2025-07-18
-  Bars: 592,661
-  Coverage: 1199.06%
-  Trading Days: 2,059
-  Gaps: 0
-  Columns: open, high, low, close, volume
+  Available: 2019-11-28 to 2025-08-15
+  Bars: 600,633
+  Coverage: 99.92%
+  Trading Days: 2,087
+  Gaps: 15
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_BCHUSD_5m.parquet
 
 DOT-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2020-08-18 to 2025-07-18
-  Bars: 516,652
-  Coverage: 1199.34%
-  Trading Days: 1,794
-  Gaps: 0
-  Columns: open, high, low, close, volume
+  Available: 2020-08-18 to 2025-08-15
+  Bars: 524,624
+  Coverage: 99.95%
+  Trading Days: 1,822
+  Gaps: 10
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_DOTUSD_5m.parquet
 
 UNI-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2020-09-17 to 2025-07-18
-  Bars: 508,253
-  Coverage: 1199.33%
-  Trading Days: 1,765
-  Gaps: 0
-  Columns: open, high, low, close, volume
+  Available: 2020-09-17 to 2025-08-15
+  Bars: 516,224
+  Coverage: 99.94%
+  Trading Days: 1,793
+  Gaps: 10
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_UNIUSD_5m.parquet
 
 AAVE-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2020-10-15 to 2025-07-18
-  Bars: 500,189
-  Coverage: 1199.32%
-  Trading Days: 1,737
-  Gaps: 0
-  Columns: open, high, low, close, volume
+  Available: 2020-10-15 to 2025-08-15
+  Bars: 508,160
+  Coverage: 99.94%
+  Trading Days: 1,765
+  Gaps: 10
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_AAVEUSD_5m.parquet
 
 SCRT-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2022-01-21 to 2025-07-18
-  Bars: 367,009
-  Coverage: 1199.96%
-  Trading Days: 1,274
-  Gaps: 0
-  Columns: open, high, low, close, volume
+  Available: 2022-01-21 to 2025-08-15
+  Bars: 374,979
+  Coverage: 100.0%
+  Trading Days: 1,302
+  Gaps: 1
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_SCRTUSD_5m.parquet
 
 ALGO-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2019-06-22 to 2025-07-18
-  Bars: 638,427
-  Coverage: 1198.86%
-  Trading Days: 2,218
-  Gaps: 1
-  Columns: open, high, low, close, volume
+  Available: 2019-06-22 to 2025-08-15
+  Bars: 646,397
+  Coverage: 99.91%
+  Trading Days: 2,246
+  Gaps: 18
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_ALGOUSD_5m.parquet
 
 VET-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2018-07-25 to 2025-07-18
-  Bars: 733,666
-  Coverage: 1198.47%
-  Trading Days: 2,550
-  Gaps: 2
-  Columns: open, high, low, close, volume
+  Available: 2018-07-25 to 2025-08-15
+  Bars: 741,635
+  Coverage: 99.87%
+  Trading Days: 2,578
+  Gaps: 23
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_VETUSD_5m.parquet
 
 XTZ-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2019-09-24 to 2025-07-18
-  Bars: 611,321
-  Coverage: 1199.0%
-  Trading Days: 2,124
-  Gaps: 0
-  Columns: open, high, low, close, volume
+  Available: 2019-09-24 to 2025-08-15
+  Bars: 619,289
+  Coverage: 99.92%
+  Trading Days: 2,152
+  Gaps: 17
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_XTZUSD_5m.parquet
 
 DOGE-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2019-07-05 to 2025-07-18
-  Bars: 634,541
-  Coverage: 1198.85%
-  Trading Days: 2,205
-  Gaps: 1
-  Columns: open, high, low, close, volume
+  Available: 2019-07-05 to 2025-08-15
+  Bars: 642,509
+  Coverage: 99.9%
+  Trading Days: 2,233
+  Gaps: 18
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_DOGEUSD_5m.parquet
 
 PEPE-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2023-05-05 to 2025-07-18
-  Bars: 231,884
-  Coverage: 1200.04%
-  Trading Days: 805
+  Available: 2023-05-05 to 2025-08-15
+  Bars: 239,851
+  Coverage: 100.0%
+  Trading Days: 832
   Gaps: 0
-  Columns: open, high, low, close, volume
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_PEPEUSD_5m.parquet
 
 SHIB-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2021-05-10 to 2025-07-18
-  Bars: 440,674
-  Coverage: 1199.77%
-  Trading Days: 1,530
-  Gaps: 0
-  Columns: open, high, low, close, volume
+  Available: 2021-05-10 to 2025-08-15
+  Bars: 448,641
+  Coverage: 99.98%
+  Trading Days: 1,558
+  Gaps: 3
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_SHIBUSD_5m.parquet
 
 BONK-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2023-12-15 to 2025-07-18
-  Bars: 167,492
-  Coverage: 1200.06%
-  Trading Days: 581
+  Available: 2023-12-15 to 2025-08-15
+  Bars: 175,459
+  Coverage: 100.0%
+  Trading Days: 609
   Gaps: 0
-  Columns: open, high, low, close, volume
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_BONKUSD_5m.parquet
 
 WIF-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2024-03-05 to 2025-07-18
-  Bars: 144,093
-  Coverage: 1200.07%
-  Trading Days: 500
+  Available: 2024-03-05 to 2025-08-15
+  Bars: 152,059
+  Coverage: 100.0%
+  Trading Days: 527
   Gaps: 0
-  Columns: open, high, low, close, volume
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_WIFUSD_5m.parquet
 
 FLOKI-USD:
   Status: ✅ Success
   Type: OHLCV Cache
-  Available: 2023-05-05 to 2025-07-18
-  Bars: 231,885
-  Coverage: 1200.05%
-  Trading Days: 805
+  Available: 2023-05-05 to 2025-08-15
+  Bars: 239,851
+  Coverage: 100.0%
+  Trading Days: 832
   Gaps: 0
-  Columns: open, high, low, close, volume
+  Columns: open, high, low, close, volume, typical, median, vwap
   Cache File: ohlcv_FLOKIUSD_5m.parquet

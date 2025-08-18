@@ -356,10 +356,64 @@ class WalkForward:
             win_rate_net_pct = float(len(wins) / denom * 100.0) if denom > 0 else float("nan")
             avg_win_net_pct = float(wins.mean() * 100.0) if len(wins) > 0 else float("nan")
             avg_loss_net_pct = float(losses.mean() * 100.0) if len(losses) > 0 else float("nan")
+            num_trades = denom
+            # Expectancy (Tharp, net) in percent
+            try:
+                wr_frac = (len(wins) / denom) if denom > 0 else float("nan")
+                expectancy_tharp_net_pct = float(wr_frac * (avg_win_net_pct) + (1.0 - wr_frac) * (avg_loss_net_pct)) if np.isfinite(wr_frac) else float("nan")
+            except Exception:
+                expectancy_tharp_net_pct = float("nan")
         else:
             win_rate_net_pct = float("nan")
             avg_win_net_pct = float("nan")
             avg_loss_net_pct = float("nan")
+            num_trades = 0
+            expectancy_tharp_net_pct = float("nan")
+
+        # Build per-trade table (contiguous non-zero positions)
+        # Each trade row summarizes the period from position entry to exit
+        trades_columns = [
+            "trade_id",
+            "entry_ts",
+            "exit_ts",
+            "direction",
+            "entry_weight",
+            "exit_weight",
+            "gross_return_simple",
+            "net_return_simple",
+            "bars",
+            "turnover_sum",
+            "cost_sum",
+        ]
+        if mask.any():
+            trades: list[dict] = []
+            for tidx, (gid, grp) in enumerate(real_df.loc[mask].groupby(seg_id[mask]), start=1):
+                entry_ts = grp.index[0]
+                exit_ts = grp.index[-1]
+                entry_w = float(grp["weight"].iloc[0])
+                exit_w = float(grp["weight"].iloc[-1])
+                direction = "long" if entry_w > 0 else "short"
+                gross_ret = float((1.0 + grp["strategy_simple_r"]).prod() - 1.0)
+                net_ret = float((1.0 + grp["strategy_simple_r_net"]).prod() - 1.0)
+                bars = int(len(grp))
+                turnover_sum = float(grp["turnover"].sum()) if "turnover" in grp.columns else 0.0
+                cost_sum = float(grp["cost_simple"].sum()) if "cost_simple" in grp.columns else 0.0
+                trades.append({
+                    "trade_id": tidx,
+                    "entry_ts": entry_ts.isoformat(),
+                    "exit_ts": exit_ts.isoformat(),
+                    "direction": direction,
+                    "entry_weight": entry_w,
+                    "exit_weight": exit_w,
+                    "gross_return_simple": gross_ret,
+                    "net_return_simple": net_ret,
+                    "bars": bars,
+                    "turnover_sum": turnover_sum,
+                    "cost_sum": cost_sum,
+                })
+            trades_df = pd.DataFrame(trades, columns=trades_columns)
+        else:
+            trades_df = pd.DataFrame(columns=trades_columns)
         print("")
         print("")
         print("")
@@ -410,6 +464,13 @@ class WalkForward:
         # Save JSON report if requested
         if save_json_dir:
             os.makedirs(save_json_dir, exist_ok=True)
+
+            # Save per-trade CSV alongside JSON outputs
+            try:
+                trades_csv_path = os.path.join(save_json_dir, "oos_wf_trades.csv")
+                trades_df.to_csv(trades_csv_path, index=False)
+            except Exception as e:
+                print(f"WARNING: Failed to write trades CSV: {e}")
 
             # Rolling Sharpe (30-day equivalent) on log returns
             tf = self.timeframe.lower().strip()
@@ -491,6 +552,8 @@ class WalkForward:
                     "win_rate_net_pct": win_rate_net_pct,
                     "avg_win_net_pct": avg_win_net_pct,
                     "avg_loss_net_pct": avg_loss_net_pct,
+                    "num_trades": int(num_trades),
+                    "expectancy_tharp_net_pct": float(expectancy_tharp_net_pct),
                 },
                 "series": {
                     "timestamps": [ts.isoformat() for ts in real_df.index.to_pydatetime()],
@@ -594,8 +657,9 @@ if __name__ == "__main__":
     _bars_per_day = max(1, int(round(24.0 / _bar_hours)))
 
     _years_lb = 4
+    _days_step = 30
     _lookback_bars = int(365 * _years_lb * _bars_per_day)   # e.g., 4 years of context
-    _step_bars = int(30 * _bars_per_day)                    # e.g., 30 days per step
+    _step_bars = int(_days_step * _bars_per_day)            # e.g., 30 days per step
 
     tester = WalkForward(
         start_date="2025-01-01",
@@ -607,12 +671,12 @@ if __name__ == "__main__":
         train_step=_step_bars,
         generate_plot=True,
         strategy_kwargs=ml_params,
-        price_column="vwap_20",
+        price_column="vwap_10",
         fee_bps=10.0,
         slippage_bps=10.0,
         position_sizing_mode="fixed_fraction",
         position_sizing_params={
-            "fraction": 0.05,
+            "fraction": 0.1,
         },        
     )
     tester.run(save_json_dir="reports/example_run")
