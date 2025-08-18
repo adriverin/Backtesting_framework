@@ -373,7 +373,7 @@ def create_maximum_cache_for_assets(
 
 if __name__ == "__main__":
     # time_intervals = ["1m", "5m", "15m", "4h", "1d"]
-    time_intervals = ["1h", "4h", "1d"]
+    time_intervals = ["5m","15m"]
 
     for tf in time_intervals:
         print(f"Getting max cached for {tf}")
