@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Trading Dashboard</title>
+	<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+	<style>
+		body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: #0b1020; color: #e6e8ef; }
+		h1 { font-weight: 600; }
+		.container { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; padding: 16px; }
+		.card { background: #121936; border-radius: 12px; padding: 12px 14px; box-shadow: 0 0 0 1px #1d274d inset; }
+		.feed { max-height: 60vh; overflow: auto; }
+		.row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed #223; }
+		.row:last-child { border-bottom: 0; }
+		.buy { color: #4ade80; }
+		.sell { color: #f87171; }
+		.small { color: #9aa3b2; font-size: 12px; }
+		.controls { margin: 8px 0; display: flex; gap: 8px; align-items: center; }
+		input, select { background: #0f1530; color: #e6e8ef; border: 1px solid #1d274d; border-radius: 8px; padding: 6px 8px; }
+		button { background: #2b5fd9; color: white; border: 0; border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+		button:hover { background: #1e46a3; }
+		.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+		.kpi { background: #0f1530; border: 1px solid #1d274d; border-radius: 10px; padding: 10px; }
+		.kpi .label { font-size: 12px; color: #9aa3b2; }
+		.kpi .value { font-size: 18px; font-weight: 600; }
+		.badge { display: inline-block; background: #0f1530; border: 1px solid #1d274d; border-radius: 999px; padding: 4px 8px; font-size: 12px; color: #c7cdd8; margin-left: 8px; }
+	</style>
+</head>
+<body>
+	<h1>Trading Dashboard <span id="session_info" class="badge"></span></h1>
+	<div class="controls">
+		<label>Symbol <input id="symbol" value="VETUSDT" /></label>
+		<label>Date <input id="date" type="date" /></label>
+		<button id="refresh">Refresh</button>
+		<span class="small">Reads NDJSON from ./logs/</span>
+	</div>
+	<div class="container">
+		<div class="card">
+			<h3>Candles + Trades</h3>
+			<div id="candles" style="height: 420px"></div>
+		</div>
+		<div class="card">
+			<h3>Metrics</h3>
+			<div class="kpis">
+				<div class="kpi"><div class="label">Trades</div><div id="k_trades" class="value">-</div></div>
+				<div class="kpi"><div class="label">Win Rate</div><div id="k_win" class="value">-</div></div>
+				<div class="kpi"><div class="label">Gross PnL</div><div id="k_gross" class="value">-</div></div>
+				<div class="kpi"><div class="label">Fees</div><div id="k_fees" class="value">-</div></div>
+				<div class="kpi"><div class="label">Net PnL</div><div id="k_net" class="value">-</div></div>
+				<div class="kpi"><div class="label">Max DD</div><div id="k_dd" class="value">-</div></div>
+				<div class="kpi"><div class="label">Avg Win</div><div id="k_avg_win" class="value">-</div></div>
+				<div class="kpi"><div class="label">Avg Loss</div><div id="k_avg_loss" class="value">-</div></div>
+				<div class="kpi"><div class="label">Profit Factor</div><div id="k_pf" class="value">-</div></div>
+				<div class="kpi"><div class="label">Expectancy</div><div id="k_expect" class="value">-</div></div>
+				<div class="kpi"><div class="label">Unrealized</div><div id="k_unreal" class="value">-</div></div>
+			</div>
+		</div>
+		<div class="card" style="grid-column: 1 / span 2">
+			<h3>Equity (Quote)</h3>
+			<div id="equity_quote" style="height: 240px"></div>
+		</div>
+		<div class="card" style="grid-column: 1 / span 2">
+			<h3>Trade Feed</h3>
+			<div class="feed" id="feed"></div>
+		</div>
+	</div>
+
+	<script>
+	const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+	async function fetchNDJSON(path) {
+		try {
+			const resp = await fetch(path + `?t=${Date.now()}`);
+			if (!resp.ok) return [];
+			const text = await resp.text();
+			return text.trim().split("\n").filter(Boolean).map(line => {
+				try { return JSON.parse(line); } catch { return null; }
+			}).filter(Boolean);
+		} catch (e) { return [];} 
+	}
+
+	function renderFeed(trades, symbol) {
+		const container = document.getElementById('feed');
+		container.innerHTML = '';
+		for (const ev of trades.filter(e => e.symbol === symbol)) {
+			const side = (ev.order?.side || '').toUpperCase();
+			const qty = ev.order?.quantity ?? ev.order?.quote_quantity ?? '?';
+			const price = ev.order?.price ?? '-';
+			const time = ev.timestamp ? new Date(ev.timestamp).toLocaleString() : '';
+			const row = document.createElement('div');
+			row.className = 'row';
+			row.innerHTML = `
+				<div>
+					<div class="${side === 'BUY' ? 'buy' : 'sell'}">${side} ${qty}</div>
+					<div class="small">${time}</div>
+				</div>
+				<div>${price}</div>
+			`;
+			container.appendChild(row);
+		}
+	}
+
+	function renderCandlesAndTrades(bars, trades, symbol, tf) {
+		const b = bars.filter(x => x.symbol === symbol && x.timeframe === tf).map(x => x.bar);
+		const x = b.map(v => new Date(v.timestamp));
+		const open = b.map(v => v.open);
+		const high = b.map(v => v.high);
+		const low = b.map(v => v.low);
+		const close = b.map(v => v.close);
+		const trace = {
+			type: 'candlestick', x, open, high, low, close,
+			increasing: { line: { color: '#4ade80' } },
+			decreasing: { line: { color: '#f87171' } },
+			name: 'OHLC'
+		};
+		const t = trades.filter(e => e.symbol === symbol && (e.order?.status === 'FILLED'));
+		const buys = t.filter(e => (e.order?.side || '').toUpperCase() === 'BUY');
+		const sells = t.filter(e => (e.order?.side || '').toUpperCase() === 'SELL');
+		const buyTrace = {
+			x: buys.map(e => new Date(e.timestamp)), y: buys.map(e => e.order?.price ?? null),
+			mode: 'markers', name: 'Buys', marker: { color: '#4ade80', size: 8, symbol: 'triangle-up' }
+		};
+		const sellTrace = {
+			x: sells.map(e => new Date(e.timestamp)), y: sells.map(e => e.order?.price ?? null),
+			mode: 'markers', name: 'Sells', marker: { color: '#f87171', size: 8, symbol: 'triangle-down' }
+		};
+		Plotly.newPlot('candles', [trace, buyTrace, sellTrace], {
+			paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+			margin: { l: 40, r: 20, t: 10, b: 40 }, xaxis: { color: '#9aa3b2' }, yaxis: { color: '#9aa3b2' }
+		});
+	}
+
+	function renderEquityFromAccount(acct) {
+		const xs = []; const ys = [];
+		for (const a of acct) {
+			const eq = a?.account?.equity_quote;
+			if (eq == null) continue;
+			xs.push(new Date(a.timestamp));
+			ys.push(Number(eq));
+		}
+		if (xs.length === 0) {
+			Plotly.purge('equity_quote');
+			return;
+		}
+		Plotly.newPlot('equity_quote', [{ x: xs, y: ys, mode: 'lines', name: 'Equity', line: { color: '#6ea8fe' } }], {
+			paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+			margin: { l: 40, r: 20, t: 10, b: 40 }, xaxis: { color: '#9aa3b2' }, yaxis: { color: '#9aa3b2' }
+		});
+	}
+
+	function computeMetrics(trades, bars, symbol, startEquity=10000) {
+		const t = trades.filter(e => e.symbol === symbol && (e.order?.status === 'FILLED'))
+			.sort((a,b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
+		let gross = 0, fees = 0, wins = 0, losses = 0, nClose = 0;
+		let sumWin = 0, sumLoss = 0;
+		let equity = startEquity, peak = startEquity, maxDD = 0;
+		let openQty = 0, entryPrice = null;
+		for (const ev of t) {
+			const fills = (ev.execution?.fills || []);
+			for (const f of fills) fees += Number(f.fee_amount || 0) || 0;
+			const realized = ev.pnl?.realized_pnl;
+			if (realized != null) {
+				const r = Number(realized) || 0;
+				gross += r;
+				equity += r; // realized affects equity immediately
+				if (r > 0) { wins++; sumWin += r; } else if (r < 0) { losses++; sumLoss += r; }
+				nClose++;
+				openQty = 0; entryPrice = null;
+			}
+			if ((ev.order?.side || '').toUpperCase() === 'BUY' && (ev.pnl?.position_qty_after || 0) > 0 && entryPrice == null) {
+				entryPrice = Number(ev.execution?.average_fill_price ?? ev.order?.price ?? null);
+				openQty = Number(ev.pnl?.position_qty_after ?? ev.execution?.cumulative_qty ?? 0) || 0;
+			}
+			equity -= (fills.reduce((acc, f) => acc + (Number(f.fee_amount || 0) || 0), 0));
+			if (equity > peak) peak = equity; else { const dd = equity - peak; if (dd < maxDD) maxDD = dd; }
+		}
+		let unreal = 0;
+		const b = bars.filter(x => x.symbol === symbol).map(x => x.bar);
+		const lastClose = b.length ? Number(b[b.length - 1].close ?? NaN) : NaN;
+		if (openQty > 0 && Number.isFinite(lastClose) && entryPrice != null) {
+			unreal = (lastClose - Number(entryPrice)) * openQty;
+			equity += unreal;
+			if (equity > peak) peak = equity; else { const dd = equity - peak; if (dd < maxDD) maxDD = dd; }
+		}
+		const n = nClose;
+		const pWin = n ? wins / n : null;
+		const avgWin = wins ? (sumWin / wins) : null;
+		const avgLoss = losses ? (sumLoss / losses) : null;
+		const pf = (sumWin > 0 && sumLoss < 0) ? (sumWin / Math.abs(sumLoss)) : null;
+		const expectancy = (pWin != null && avgWin != null && avgLoss != null) ? (pWin * avgWin + (1 - pWin) * avgLoss) : null;
+		return { n, pWin, gross, fees, net: gross - fees, maxDD, avgWin, avgLoss, pf, expectancy, unreal };
+	}
+
+	function applyKpisFromSummary(summary) {
+		if (!summary) return false;
+		const toNum = v => (v == null ? null : Number(v));
+		const w = summary.win_rate; // fraction (expected)
+		document.getElementById('k_trades').textContent = String(summary.trades ?? '-');
+		document.getElementById('k_win').textContent = (w == null ? '-' : (Number(w) * 100).toFixed(1) + '%');
+		document.getElementById('k_gross').textContent = (toNum(summary.gross_pnl_quote) ?? 0).toFixed(2);
+		document.getElementById('k_fees').textContent = (toNum(summary.fees_quote) ?? 0).toFixed(2);
+		document.getElementById('k_net').textContent = (toNum(summary.net_pnl_quote) ?? 0).toFixed(2);
+		document.getElementById('k_dd').textContent = (toNum(summary.max_drawdown_quote) ?? 0).toFixed(2);
+		return true;
+	}
+
+	async function refresh() {
+		const sym = document.getElementById('symbol').value.trim();
+		const date = document.getElementById('date').value || new Date().toISOString().slice(0,10);
+		const tf = '4h';
+		const trades = await fetchNDJSON(`logs/trades_${date}.ndjson`);
+		const bars = await fetchNDJSON(`logs/bars_${sym}_${tf}_${date}.ndjson`);
+		const run = await fetchNDJSON(`logs/run_${date}.ndjson`);
+		const acct = await fetchNDJSON(`logs/account_${date}.ndjson`);
+		renderFeed(trades, sym);
+		renderCandlesAndTrades(bars, trades, sym, tf);
+		renderEquityFromAccount(acct);
+		let summary = null;
+		if (run.length) {
+			const ends = run.filter(e => e.event_type === 'RUN_END').sort((a,b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
+			summary = ends.length ? (ends[ends.length - 1].summary || null) : null;
+			const last = ends.length ? ends[ends.length - 1] : null;
+			if (last) {
+				document.getElementById('session_info').textContent = `${last.mode || ''} ${last.run_id || ''}`.trim();
+			}
+		}
+		const applied = applyKpisFromSummary(summary);
+		if (!applied) {
+			const m = computeMetrics(trades, bars, sym, 10000);
+			document.getElementById('k_trades').textContent = String(m.n ?? '-');
+			document.getElementById('k_win').textContent = (m.pWin == null ? '-' : (m.pWin*100).toFixed(1) + '%');
+			document.getElementById('k_gross').textContent = (m.gross ?? 0).toFixed(2);
+			document.getElementById('k_fees').textContent = (m.fees ?? 0).toFixed(2);
+			document.getElementById('k_net').textContent = (m.net ?? 0).toFixed(2);
+			document.getElementById('k_dd').textContent = (m.maxDD ?? 0).toFixed(2);
+		}
+		const m2 = computeMetrics(trades, bars, sym, 10000);
+		document.getElementById('k_avg_win').textContent = (m2.avgWin == null ? '-' : m2.avgWin.toFixed(2));
+		document.getElementById('k_avg_loss').textContent = (m2.avgLoss == null ? '-' : m2.avgLoss.toFixed(2));
+		document.getElementById('k_pf').textContent = (m2.pf == null ? '-' : m2.pf.toFixed(2));
+		document.getElementById('k_expect').textContent = (m2.expectancy == null ? '-' : m2.expectancy.toFixed(2));
+		document.getElementById('k_unreal').textContent = (m2.unreal ?? 0).toFixed(2);
+	}
+
+	document.getElementById('refresh').addEventListener('click', refresh);
+	refresh();
+	setInterval(refresh, 5000);
+	</script>
+</body>
+</html>

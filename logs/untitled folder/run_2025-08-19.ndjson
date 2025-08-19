@@ -1,0 +1,1 @@
+{"event_type": "RUN_START", "event_id": "30dab19c-bcc6-475f-bf08-53a8a34dad81", "timestamp": "2025-08-19T13:21:07.400337+00:00", "run_id": "run_2025-08-19_132107", "strategy_id": "ml_params", "version": "dev", "mode": "PAPER", "config": {"symbol": "VETUSDT", "timeframe": "4h"}}
