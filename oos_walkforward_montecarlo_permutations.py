@@ -40,6 +40,7 @@ def _profit_factor(returns: pd.Series) -> float:
 # ---------------------------------------------------------------------- #
 
 def _ensure_price_column_exists_oos(df: pd.DataFrame, price_column: str) -> pd.DataFrame:
+    """Ensure price column exists; support 'median', 'typical', and 'vwap' variants like 'vwap', 'vwap_10', 'vwap10'."""
     if price_column in df.columns:
         return df
     df = df.copy()
@@ -54,10 +55,16 @@ def _ensure_price_column_exists_oos(df: pd.DataFrame, price_column: str) -> pd.D
             df[col] = (df["high"] + df["low"] + df["close"]) / 3
             return df
         raise KeyError("Cannot create 'typical' column: missing 'high', 'low' or 'close'.")
-    if col == "vwap":
+    if col.startswith("vwap"):
         required = ["high", "low", "close", "volume"]
         if all(c in df.columns for c in required):
-            vwap_window = 20
+            suffix = col[4:]
+            if suffix.startswith("_") or suffix.startswith("-"):
+                suffix = suffix[1:]
+            if suffix.isdigit() and len(suffix) > 0:
+                vwap_window = int(suffix)
+            else:
+                vwap_window = 20
             typical_price = (df["high"] + df["low"] + df["close"]) / 3
             tpv = typical_price * df["volume"]
             cumulative_tpv = tpv.rolling(window=vwap_window, min_periods=1).sum()
@@ -84,6 +91,7 @@ def _walkforward_signals_oos(
         train_start = i - train_lookback
         train_end = i
         train_df = ohlc.iloc[train_start:train_end]
+        train_df = _ensure_price_column_exists_oos(train_df, price_column)
 
         strategy: BaseStrategy = strategy_cls(price_column=price_column, **strategy_kwargs)
         _ = strategy.optimize(train_df)
@@ -120,13 +128,26 @@ def _compute_single_perm_pf_net_oos(
 ) -> float:
     full_fp = Path(f"data/ohlcv_{asset}_{timeframe}.parquet")
     full_df = pd.read_parquet(full_fp)
+    # Normalize datetime index to UTC-naive for consistent comparisons
+    if not isinstance(full_df.index, pd.DatetimeIndex):
+        full_df.index = pd.to_datetime(full_df.index, errors="coerce")
+    if getattr(full_df.index, "tz", None) is not None:
+        full_df.index = full_df.index.tz_convert("UTC").tz_localize(None)
     from permutations import get_permutation  # local import for subprocess
     perm_df = get_permutation(full_df, start_index=perm_start_index, seed=seed)
-    perm_df = perm_df[(perm_df.index >= start_date) & (perm_df.index < end_date)]
-    perm_df = _ensure_price_column_exists_oos(perm_df, price_column)
+    # Build a padded slice that includes pre-start lookback bars for training
+    idx = perm_df.index
+    _start_ts = pd.to_datetime(start_date)
+    _end_ts = pd.to_datetime(end_date)
+    analysis_start = int(idx.searchsorted(_start_ts, side="left"))
+    analysis_end = int(idx.searchsorted(_end_ts, side="left"))
+    slice_start = max(0, analysis_start - train_lookback)
+    wf_df = perm_df.iloc[slice_start:analysis_end]
+    wf_df = _ensure_price_column_exists_oos(wf_df, price_column)
 
+    # Generate WF signals on the padded window
     perm_signals = _walkforward_signals_oos(
-        perm_df,
+        wf_df,
         price_column,
         strategy_name,
         strategy_kwargs,
@@ -134,25 +155,30 @@ def _compute_single_perm_pf_net_oos(
         train_step,
     )
 
-    perm_df["r"] = np.log(perm_df[price_column]).diff().shift(-1)
-    perm_df["simple_r"] = perm_df[price_column].pct_change().shift(-1)
-    perm_df["signal"] = perm_signals
-    perm_df["weight"] = compute_position_weights(
-        signals=pd.Series(perm_signals, index=perm_df.index),
-        simple_returns=perm_df["simple_r"],
-        price=perm_df[price_column],
+    # Compute returns/weights on the padded window, then trim to analysis window
+    wf_df["r"] = np.log(wf_df[price_column]).diff().shift(-1)
+    wf_df["simple_r"] = wf_df[price_column].pct_change().shift(-1)
+    wf_df["signal"] = perm_signals
+    wf_df["weight"] = compute_position_weights(
+        signals=pd.Series(perm_signals, index=wf_df.index),
+        simple_returns=wf_df["simple_r"],
+        price=wf_df[price_column],
         timeframe=timeframe,
         mode=position_sizing_mode,
         mode_params=position_sizing_params,
     )
-    perm_df["strategy_r"] = perm_df["r"] * perm_df["weight"]
-    perm_df["strategy_simple_r"] = perm_df["simple_r"] * perm_df["weight"]
+    wf_df["strategy_r"] = wf_df["r"] * wf_df["weight"]
+    wf_df["strategy_simple_r"] = wf_df["simple_r"] * wf_df["weight"]
     fee_rate = (fee_bps + slippage_bps) / 10000.0
-    turnover = (perm_df["weight"].diff().abs()).fillna(perm_df["weight"].abs())
-    perm_df["cost_simple"] = fee_rate * turnover
-    perm_df["strategy_simple_r_net"] = perm_df["strategy_simple_r"] - perm_df["cost_simple"]
-    perm_df["strategy_r_net"] = np.log((1.0 + perm_df["strategy_simple_r_net"]).clip(lower=1e-12))
-    return _profit_factor(perm_df["strategy_r_net"].dropna())
+    wf_df["turnover"] = (wf_df["weight"].diff().abs()).fillna(wf_df["weight"].abs())
+    wf_df["cost_simple"] = fee_rate * wf_df["turnover"]
+    wf_df["strategy_simple_r_net"] = wf_df["strategy_simple_r"] - wf_df["cost_simple"]
+    wf_df["strategy_r_net"] = np.log((1.0 + wf_df["strategy_simple_r_net"]).clip(lower=1e-12))
+
+    # Trim to analysis window for PF computation
+    trimmed = wf_df[(wf_df.index >= _start_ts) & (wf_df.index < _end_ts)]
+    trimmed = trimmed.dropna(subset=["r", "strategy_r_net"])  # avoid trailing NaNs impacting PF
+    return _profit_factor(trimmed["strategy_r_net"].dropna())
 
 
 # ---------------------------------------------------------------------- #
@@ -175,6 +201,8 @@ class WalkForwardMCTester:
         strategy_kwargs: dict | None = None,
         fee_bps: float = 0.0,
         slippage_bps: float = 0.0,
+        position_sizing_mode: str = "full_notional",
+        position_sizing_params: dict | None = None,
     ) -> None:
         self.start_date = start_date
         self.end_date = end_date
@@ -195,8 +223,8 @@ class WalkForwardMCTester:
         self.strategy_cls: Type[BaseStrategy] = aVAILABLE_STRATEGIES[strategy_name]
         self.fee_bps = fee_bps
         self.slippage_bps = slippage_bps
-        self.position_sizing_mode: str = "full_notional"
-        self.position_sizing_params: dict = {}
+        self.position_sizing_mode: str = position_sizing_mode
+        self.position_sizing_params: dict = position_sizing_params or {}
 
         self.perm_start_index = self._get_perm_start_index(start_date)
         print(f"Permutation start index: {self.perm_start_index}")
@@ -217,21 +245,27 @@ class WalkForwardMCTester:
         return df
 
     def get_df(self) -> pd.DataFrame:
-        df = self._load_raw()
-        return df[(df.index >= self.start_date) & (df.index < self.end_date)]
+        full_df = self._load_raw()
+        idx = full_df.index
+        start_ts = pd.to_datetime(self.start_date)
+        end_ts = pd.to_datetime(self.end_date)
+        analysis_start = int(idx.searchsorted(start_ts, side="left"))
+        analysis_end = int(idx.searchsorted(end_ts, side="left"))
+        slice_start = max(0, analysis_start - self.train_lookback)
+        return full_df.iloc[slice_start:analysis_end]
 
     def _ensure_price_column_exists(self, df: pd.DataFrame) -> pd.DataFrame:
         """Ensure the requested price column exists, creating common derived ones if needed.
-
+        
         Supports:
         - 'median'   = (high + low) / 2
         - 'typical'  = (high + low + close) / 3
-        - 'vwap'     = rolling VWAP over 20 bars (requires volume)
+        - 'vwap' and variants like 'vwap_10' or 'vwap10' (requires volume)
         """
         price_column = self.price_column
         if price_column in df.columns:
             return df
-
+        
         df = df.copy()
         col = price_column
         if col == "median":
@@ -246,16 +280,22 @@ class WalkForwardMCTester:
                 print(f"--- Created '{col}' column on-the-fly. ---")
                 return df
             raise KeyError("Cannot create 'typical' column: missing 'high', 'low' or 'close'.")
-        if col == "vwap":
+        if col.startswith("vwap"):
             required = ["high", "low", "close", "volume"]
             if all(c in df.columns for c in required):
-                vwap_window = 20
+                suffix = col[4:]
+                if suffix.startswith("_") or suffix.startswith("-"):
+                    suffix = suffix[1:]
+                if suffix.isdigit() and len(suffix) > 0:
+                    vwap_window = int(suffix)
+                else:
+                    vwap_window = 20
                 typical_price = (df["high"] + df["low"] + df["close"]) / 3
                 tpv = typical_price * df["volume"]
                 cumulative_tpv = tpv.rolling(window=vwap_window, min_periods=1).sum()
                 cumulative_volume = df["volume"].rolling(window=vwap_window, min_periods=1).sum()
                 df[col] = (cumulative_tpv / cumulative_volume).fillna(method="ffill")
-                print(f"--- Created rolling 'vwap' ({vwap_window}-bar) column on-the-fly. ---")
+                print(f"--- Created rolling '{col}' ({vwap_window}-bar) column on-the-fly. ---")
                 return df
             raise KeyError("Cannot create 'vwap' column: missing one of 'high','low','close','volume'.")
         raise KeyError(f"Price column '{price_column}' not found in DataFrame and cannot be derived.")
@@ -369,6 +409,11 @@ class WalkForwardMCTester:
         real_df["cost_simple"] = fee_rate * turnover
         real_df["strategy_simple_r_net"] = real_df["strategy_simple_r"] - real_df["cost_simple"]
         real_df["strategy_r_net"] = np.log((1.0 + real_df["strategy_simple_r_net"]).clip(lower=1e-12))
+        # Trim to analysis window and drop trailing NaNs from shift/diff
+        _start_ts = pd.to_datetime(self.start_date)
+        _end_ts = pd.to_datetime(self.end_date)
+        real_df = real_df[(real_df.index >= _start_ts) & (real_df.index < _end_ts)]
+        real_df = real_df.dropna(subset=["r", "strategy_r"])        
         real_pf = _profit_factor(real_df["strategy_r"].dropna())
         real_pf_net = _profit_factor(real_df["strategy_r_net"].dropna())
         print(f"OOS real Profit Factor: {real_pf:.4f}")
@@ -402,6 +447,7 @@ class WalkForwardMCTester:
 
     def run(self, save_json_dir: str | None = None):
         real_df = self.get_df()
+        real_df = self._ensure_price_column_exists(real_df)
         print(
             f"Calculating walk-forward signals for real data from {self.start_date} to {self.end_date}"
         )
@@ -410,14 +456,27 @@ class WalkForwardMCTester:
         real_df["r"] = np.log(real_df[self.price_column]).diff().shift(-1)
         real_df["simple_r"] = real_df[self.price_column].pct_change().shift(-1)
         real_df["signal"] = real_signals
-        real_df["strategy_r"] = real_df["r"] * real_df["signal"]
-        real_df["strategy_simple_r"] = real_df["simple_r"] * real_df["signal"]
+        real_df["weight"] = compute_position_weights(
+            signals=pd.Series(real_signals, index=real_df.index),
+            simple_returns=real_df["simple_r"],
+            price=real_df[self.price_column],
+            timeframe=self.timeframe,
+            mode=self.position_sizing_mode,
+            mode_params=self.position_sizing_params,
+        )
+        real_df["strategy_r"] = real_df["r"] * real_df["weight"]
+        real_df["strategy_simple_r"] = real_df["simple_r"] * real_df["weight"]
         # Costs
         fee_rate = (self.fee_bps + self.slippage_bps) / 10000.0
-        turnover = (real_df["signal"].diff().abs()).fillna(real_df["signal"].abs())
+        turnover = (real_df["weight"].diff().abs()).fillna(real_df["weight"].abs())
         real_df["cost_simple"] = fee_rate * turnover
         real_df["strategy_simple_r_net"] = real_df["strategy_simple_r"] - real_df["cost_simple"]
         real_df["strategy_r_net"] = np.log((1.0 + real_df["strategy_simple_r_net"]).clip(lower=1e-12))
+        # Trim to requested analysis window
+        _start_ts = pd.to_datetime(self.start_date)
+        _end_ts = pd.to_datetime(self.end_date)
+        real_df = real_df[(real_df.index >= _start_ts) & (real_df.index < _end_ts)]
+        real_df = real_df.dropna(subset=["r", "strategy_r"])        
         real_pf = _profit_factor(real_df["strategy_r"].dropna())
         real_pf_net = _profit_factor(real_df["strategy_r_net"].dropna())
         print(f"OOS real Profit Factor: {real_pf:.4f}")
@@ -442,6 +501,8 @@ class WalkForwardMCTester:
                         repeat(self.train_lookback),
                         repeat(self.train_step),
                         repeat(self.perm_start_index),
+                        repeat(self.position_sizing_mode),
+                        repeat(self.position_sizing_params),
                     ),
                     total=len(seeds),
                 )
@@ -487,6 +548,8 @@ class WalkForwardMCTester:
                     "train_step": self.train_step,
                     "n_perm": self.n_perm,
                     "strategy_kwargs": self.strategy_kwargs,
+                    "position_sizing_mode": self.position_sizing_mode,
+                    "position_sizing_params": self.position_sizing_params,
                 },
                 "metrics": {
                     "pf_gross": float(real_pf),
@@ -540,16 +603,59 @@ def main():
 if __name__ == "__main__":
     # main()
 
+    # tester = WalkForwardMCTester(
+    #     start_date="2019-01-01",
+    #     end_date="2024-01-01",
+    #     strategy_name="ma",
+    #     asset="ETHUSD",
+    #     timeframe="1h",
+    #     train_lookback=24*365*4,
+    #     train_step=24*30,
+    #     n_perm=10,
+    #     generate_plot=True,
+    # )
+
+    from is_results import ml_params
+
+    # Derive sensible walk-forward window sizes in BARS for the chosen timeframe
+    _tf = "4h"
+    if _tf.endswith("m"):
+        _bar_hours = int(_tf[:-1]) / 60.0
+    elif _tf.endswith("h"):
+        _bar_hours = float(int(_tf[:-1]))
+    elif _tf.endswith("d"):
+        _bar_hours = float(int(_tf[:-1]) * 24)
+    else:
+        _bar_hours = 1.0
+    _bars_per_day = max(1, int(round(24.0 / _bar_hours)))
+
+    _years_lb = 4
+    _days_step = 30
+    _lookback_bars = int(365 * _years_lb * _bars_per_day)   # e.g., 4 years of context
+    _step_bars = int(_days_step * _bars_per_day)            # e.g., 30 days per step
+
+    # ------------------------------------------------------------------ #
+    # Run the tester                                                     #
+    # ------------------------------------------------------------------ #
+
     tester = WalkForwardMCTester(
-        start_date="2019-01-01",
-        end_date="2024-01-01",
-        strategy_name="ma",
-        asset="ETHUSD",
-        timeframe="1h",
-        train_lookback=24*365*4,
-        train_step=24*30,
-        n_perm=10,
+        start_date="2025-01-01",
+        end_date="2025-08-01",
+        strategy_name="ml",
+        asset="VETUSD",
+        timeframe=_tf,
+        train_lookback=_lookback_bars,
+        train_step=_step_bars,
         generate_plot=True,
-    )
-    tester.plot_oos_walkforward()
+        strategy_kwargs=ml_params,
+        price_column="vwap_10",
+        n_perm=20,
+        fee_bps=10.0,
+        slippage_bps=10.0,
+        position_sizing_mode="fixed_fraction",
+        position_sizing_params={
+            "fraction": 0.1,
+        },        
+    )    
+    tester.run(save_json_dir="reports/example_run")
 
