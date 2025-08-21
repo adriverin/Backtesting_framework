@@ -14,4 +14,4 @@ tmp_*
 reports/dashboard_*
 reports/*.png
 prompt_papertrading.txt
-log/*
+logs/*

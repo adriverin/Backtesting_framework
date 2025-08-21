@@ -33,7 +33,7 @@ class TradeConfig:
 	position_sizing_mode: str = "fixed_fraction"
 	position_sizing_params: Dict[str, Any] = None
 	paper: bool = True
-	poll_seconds: int = 5
+	poll_seconds: int = 30
 	logs_dir: str = "logs"
 	vwap_window: int = 10  # map 'vwap_10' to vwap + window
 	market_quote_usdt: float = 25.0  # quote notional to spend per market trade when client is enabled
@@ -44,6 +44,7 @@ class TradeConfig:
 	wf_step_days: int = 7
 	sim_loop: bool = False  # if True, loop over historical bars indefinitely
 	base_qty: float = 0.001  # default simulated base amount per buy
+	dashboard_tf: Optional[str] = None  # Extra timeframe to log for the dashboard (e.g., '1h')
 
 
 def load_latest_ohlcv(asset: str, timeframe: str) -> pd.DataFrame:
@@ -104,7 +105,7 @@ def main() -> None:
 		position_sizing_mode="fixed_fraction",
 		position_sizing_params={"fraction": float(os.environ.get("SIZE_FRACTION", "0.1"))},
 		paper=True,
-		poll_seconds=int(os.environ.get("POLL_SECONDS", "5")),
+		poll_seconds=int(os.environ.get("POLL_SECONDS", "60")),
 		logs_dir="logs",
 		vwap_window=params.get("vwap_window", 10),
 		market_quote_usdt=float(os.environ.get("TEST_ORDER_QUOTE", "1000")),
@@ -115,6 +116,7 @@ def main() -> None:
 		wf_step_days=int(os.environ.get("WF_STEP_DAYS", "7")),
 		sim_loop=(os.environ.get("SIM_LOOP", "0") == "1"),
 		base_qty=float(os.environ.get("BASE_QTY", "40000")),
+		dashboard_tf=os.environ.get("DASHBOARD_TF", None),
 	)
 
 	logger = NDJSONLogger(logs_dir=cfg.logs_dir, strategy_id=f"{cfg.strategy_name}_params", is_paper=cfg.paper)
@@ -124,7 +126,7 @@ def main() -> None:
 		run_id=run_id,
 		version="dev",
 		mode="PAPER" if cfg.paper else "LIVE",
-		config={"symbol": cfg.symbol, "timeframe": cfg.timeframe},
+		config={"symbol": cfg.symbol, "timeframe": cfg.timeframe, "dashboard_tf": cfg.dashboard_tf},
 	)
 
 	asset = cfg.symbol.replace("USDT", "USD") if cfg.symbol.endswith("USDT") else cfg.symbol
@@ -140,10 +142,26 @@ def main() -> None:
 	# Position state
 	position_qty = 0.0
 	position_entry_price: Optional[float] = None
+	prev_signal: Optional[float] = None
+	last_applied_bar_ts: Optional[str] = None
+	signal_state_path = os.path.join(cfg.logs_dir, f"state_{cfg.symbol}_{cfg.timeframe}.json")
 
 	client = make_client()
 
 	try:
+		# Restore previous state if available
+		try:
+			import json as _json
+			if os.path.exists(signal_state_path):
+				with open(signal_state_path, 'r') as f:
+					st = _json.load(f)
+				position_qty = float(st.get('position_qty', 0.0))
+				position_entry_price = st.get('position_entry_price', None)
+				prev_signal = st.get('prev_signal', None)
+				last_applied_bar_ts = st.get('last_applied_bar_ts', None)
+		except Exception:
+			pass
+
 		# Prepare walk-forward parameters
 		bpd = timeframe_to_bars_per_day(cfg.timeframe)
 		lookback_bars = max(bpd * 365 * int(round(cfg.wf_lookback_years)), bpd * 30)  # at least 30 days
@@ -152,15 +170,11 @@ def main() -> None:
 		model_strategy: Optional[BaseStrategy] = None
 		i = 0
 		last_bar_ts_str = None
+		dashboard_last_bar_ts_str = None
 
 		while True:
 			# Reload data periodically to pick new bars if present
 			df = load_latest_ohlcv(asset, cfg.timeframe)
-			# Require only a minimal dataset (>= ~30 days or 200 bars) to start
-			required_min_bars = max(200, timeframe_to_bars_per_day(cfg.timeframe) * 30)
-			if len(df) < required_min_bars:
-				time.sleep(cfg.poll_seconds)
-				continue
 
 			# Initialize i to start at the most recent bar once we have enough history
 			if i < lookback_bars:
@@ -179,12 +193,26 @@ def main() -> None:
 			bar_ts = window.index[-1].isoformat()
 			price = float(window[cfg.price_column].iloc[-1]) if cfg.price_column in window.columns else float(window["close"].iloc[-1])
 
-			# Write bar snapshot
+			# Write bar snapshot for trading timeframe
 			bar = {k: (float(window[k].iloc[-1]) if k in window.columns else None) for k in ["open","high","low","close","volume"]}
 			bar["timestamp"] = bar_ts
 			if last_bar_ts_str != bar_ts:
 				logger.log_bar_snapshot(cfg.symbol, cfg.timeframe, bar)
 				last_bar_ts_str = bar_ts
+
+			# Additionally log a dashboard timeframe bar if configured
+			if cfg.dashboard_tf:
+				try:
+					df_dash = load_latest_ohlcv(asset, cfg.dashboard_tf)
+					if len(df_dash):
+						dash_ts = df_dash.index[-1].isoformat()
+						if dashboard_last_bar_ts_str != dash_ts:
+							bar_dash = {k: (float(df_dash[k].iloc[-1]) if k in df_dash.columns else None) for k in ["open","high","low","close","volume"]}
+							bar_dash["timestamp"] = dash_ts
+							logger.log_bar_snapshot(cfg.symbol, cfg.dashboard_tf, bar_dash)
+							dashboard_last_bar_ts_str = dash_ts
+				except Exception:
+					pass
 
 			# Risk: daily loss limit (simple equity calc)
 			current_equity = cfg.start_equity + gross_pnl - fees_quote
@@ -212,13 +240,21 @@ def main() -> None:
 			# Generate current signal using fitted model on calc_df
 			signals = model_strategy.generate_signals(calc_df)
 			current_signal = float(signals.iloc[-1])
+			# Log signal snapshot
+			logger.log_signal_snapshot(cfg.symbol, cfg.timeframe, {
+				"timestamp": bar_ts,
+				"value": current_signal,
+			})
+
+			# Per-bar target application: apply each bar's desired position once
+			target_long = current_signal > 0
 
 			# Trade logic: long-only enter/exit
 			latency_ms = None
 			execution = None
 			order = None
 
-			if current_signal > 0 and position_qty == 0.0:
+			if (last_applied_bar_ts != bar_ts) and target_long and position_qty == 0.0:
 				base_qty = float(cfg.base_qty)
 				if cfg.max_position_notional is not None:
 					base_qty = min(base_qty, abs(cfg.max_position_notional) / max(price, 1e-8))
@@ -303,7 +339,7 @@ def main() -> None:
 				}
 				logger.log_trade_event("BINANCE", cfg.symbol, cfg.base_asset, cfg.quote_asset, order, execution, pnl=pnl_payload, latency_ms=latency_ms, run_id=run_id)
 
-			elif current_signal <= 0 and position_qty > 0.0:
+			elif (last_applied_bar_ts != bar_ts) and (not target_long) and position_qty > 0.0:
 				close_qty = position_qty
 				client_order_id = f"cli-{uuid.uuid4().hex[:8]}"
 				order = {
@@ -426,8 +462,22 @@ def main() -> None:
 						logger.log_error(severity="WARNING", source="API", message="Account fetch failed", context={"error": str(ex)})
 				logger.log_account_snapshot(exchange="BINANCE", account=account, run_id=run_id)
 
+			# Mark this bar as processed (even if no position change) to avoid reapplying on restart
+			last_applied_bar_ts = bar_ts
 			# Advance and wait next poll
 			i += 1
+			# Update prev_signal and persist minimal state
+			prev_signal = current_signal
+			try:
+				with open(signal_state_path, 'w') as f:
+					_json.dump({
+						"position_qty": position_qty,
+						"position_entry_price": position_entry_price,
+						"prev_signal": prev_signal,
+						"last_applied_bar_ts": last_applied_bar_ts,
+					}, f)
+			except Exception:
+				pass
 			time.sleep(cfg.poll_seconds)
 
 	finally:

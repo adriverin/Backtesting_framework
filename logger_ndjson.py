@@ -153,6 +153,17 @@ class NDJSONLogger:
 		self._write_line(filename, payload)
 		return payload
 
+	def log_signal_snapshot(self, symbol: str, timeframe: str, signal: Dict[str, Any]) -> Dict[str, Any]:
+		"""Write a signal snapshot to NDJSON (no schema validation)."""
+		filename = f"signals_{symbol}_{timeframe}_{self._date_str()}.ndjson"
+		payload = {
+			"symbol": symbol,
+			"timeframe": timeframe,
+			"signal": signal,
+		}
+		self._write_line(filename, payload)
+		return payload
+
 
 # ------------------------------- Schemas -------------------------------- #
 

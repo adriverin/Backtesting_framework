@@ -1,0 +1,24 @@
+Cryptocurrency Asset OHLCV Cache Summary
+=========================================
+
+Created: 2025-08-20T23:48:32.520442
+Cache Type: OHLCV (Open, High, Low, Close, Volume)
+Interval: 1m
+Requested Range: 2010-01-01 to 2030-12-31
+Total Assets: 1
+Successful: 1
+Failed: 0
+
+Asset Details:
+--------------------------------------------------
+
+VET-USD:
+  Status: ✅ Success
+  Type: OHLCV Cache
+  Available: 2018-07-25 to 2025-08-20
+  Bars: 3,715,869
+  Coverage: 99.87%
+  Trading Days: 2,583
+  Gaps: 24
+  Columns: open, high, low, close, volume, typical, median, vwap
+  Cache File: ohlcv_VETUSD_1m.parquet

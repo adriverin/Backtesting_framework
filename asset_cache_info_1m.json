@@ -1,0 +1,35 @@
+{
+  "creation_date": "2025-08-20T23:48:32.520442",
+  "requested_range": {
+    "start": "2010-01-01",
+    "end": "2030-12-31"
+  },
+  "interval": "1m",
+  "cache_type": "ohlcv",
+  "total_assets": 1,
+  "successful_assets": 1,
+  "failed_assets": 0,
+  "assets": {
+    "VET-USD": {
+      "status": "success",
+      "cache_type": "ohlcv",
+      "available_from": "2018-07-25",
+      "available_to": "2025-08-20",
+      "total_bars": 3715869,
+      "data_coverage_pct": 99.87,
+      "large_gaps_detected": 24,
+      "trading_days": 2583,
+      "ohlcv_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "typical",
+        "median",
+        "vwap"
+      ],
+      "cache_file": "ohlcv_VETUSD_1m.parquet"
+    }
+  }
+}

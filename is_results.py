@@ -668,8 +668,8 @@ ml_params_geminipro25 = { # pvalue 0.62, N=50
 ml_params = {
     # "interval": "1h",
     # "forecast_horizon_hours": 1,
-    "interval": "4h",
-    "forecast_horizon_hours": 4,    
+    "interval": "1m",
+    "forecast_horizon_hours": 1,    
     "n_epochs": 200,
     "hidden_sizes": (32, 16, 8),
     "signal_percentiles": (10, 90),
