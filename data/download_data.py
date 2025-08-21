@@ -373,39 +373,40 @@ def create_maximum_cache_for_assets(
 
 if __name__ == "__main__":
     # time_intervals = ["1m", "5m", "15m", "4h", "1d"]
-    time_intervals = ["5m","15m"]
+    time_intervals = ["1m"]
+    # time_intervals = ["5m","15m"]
 
     for tf in time_intervals:
         print(f"Getting max cached for {tf}")
         create_maximum_cache_for_assets(
             assets=[
-                "BTC-USD",
-                "ETH-USD",
-                "SOL-USD",
-                "ADA-USD",
-                "AVAX-USD",
-                "BNB-USD",
-                "XRP-USD",
-                "LTC-USD",
-                "LINK-USD",
-                "XLM-USD",
-                "ATOM-USD",
-                "HBAR-USD",
-                "BCH-USD",
-                "DOT-USD",
-                "UNI-USD",
-                "AAVE-USD",
-                "SCRT-USD",
-                "ALGO-USD",
+                # "BTC-USD",
+                # "ETH-USD",
+                # "SOL-USD",
+                # "ADA-USD",
+                # "AVAX-USD",
+                # "BNB-USD",
+                # "XRP-USD",
+                # "LTC-USD",
+                # "LINK-USD",
+                # "XLM-USD",
+                # "ATOM-USD",
+                # "HBAR-USD",
+                # "BCH-USD",
+                # "DOT-USD",
+                # "UNI-USD",
+                # "AAVE-USD",
+                # "SCRT-USD",
+                # "ALGO-USD",
                 "VET-USD",
-                "XTZ-USD",
-                # Meme coins (availability may vary on Yahoo Finance):
-                "DOGE-USD",
-                "PEPE-USD",
-                "SHIB-USD",
-                "BONK-USD",
-                "WIF-USD",
-                "FLOKI-USD",
+                # "XTZ-USD",
+                # # Meme coins (availability may vary on Yahoo Finance):
+                # "DOGE-USD",
+                # "PEPE-USD",
+                # "SHIB-USD",
+                # "BONK-USD",
+                # "WIF-USD",
+                # "FLOKI-USD",
             ],
             interval=tf,
             start="2010-01-01",
