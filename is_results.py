@@ -171,6 +171,7 @@ def plot_cumulative_returns(
     save_json_dir: str | None = None,
     position_sizing_mode: str = "full_notional",
     position_sizing_params: dict | None = None,
+    mode: str = "spot",
 ):
     strategy_kwargs = strategy_kwargs or {}
 
@@ -182,7 +183,8 @@ def plot_cumulative_returns(
     # ------------------------------------------------------------------ #
     # Load data                                                          #
     # ------------------------------------------------------------------ #
-    filepath = Path(f"data/ohlcv_{asset}_{timeframe}.parquet")
+    base_dir = Path("data/futures") if (mode or "spot").strip().lower() == "futures" else Path("data/spot")
+    filepath = base_dir / f"ohlcv_{asset}_{timeframe}.parquet"
     if not filepath.exists():
         raise FileNotFoundError(filepath)
     df = pd.read_parquet(filepath)
@@ -229,7 +231,14 @@ def plot_cumulative_returns(
     df["strategy_simple_r"] = df["simple_r"] * df["weight"]
 
     # Fees/slippage model (per-side bps applied on position changes)
-    fee_rate = (fee_bps + slippage_bps) / 10000.0
+    _mode = (mode or "spot").strip().lower()
+    if fee_bps and fee_bps > 0:
+        effective_fee_bps = float(fee_bps)
+    else:
+        # Sensible defaults per mode if not provided: Spot≈10bps, Futures≈4bps
+        effective_fee_bps = 4.0 if _mode == "futures" else 10.0
+    effective_slippage_bps = float(slippage_bps)
+    fee_rate = (effective_fee_bps + effective_slippage_bps) / 10000.0
     turnover = (df["weight"].diff().abs()).fillna(df["weight"].abs())
     df["turnover"] = turnover
     df["cost_simple"] = fee_rate * turnover
@@ -324,15 +333,22 @@ def plot_cumulative_returns(
     breakeven_fee_bps = breakeven_fee_rate * 10000.0
 
     print("=" * 80)
-    print(f"Results for strategy '{strategy_name}' on {asset} {timeframe}")
+    print(f"Results for strategy '{strategy_name}' on {asset} {timeframe} | Mode: {_mode.upper()}")
     print(f"Period: {start_date} -> {end_date} | Observations: {len(df)}")
+    # Ending equity values from cumulative simple returns (avoid mixing % with decimals)
+    # asset_end_value = 100000.0 * float((1.0 + asset_cum_simple.iloc[-1]))
+    # strat_end_value_gross = 100000.0 * float((1.0 + strat_cum_simple_gross.iloc[-1]))
+    strat_end_value_net = 100000.0 * float((1.0 + strat_cum_simple_net.iloc[-1]))
+    # print(f"$100,000 invested in asset would be ${asset_end_value:,.2f}")
+    # print(f"$100,000 strategy (gross) would be   ${strat_end_value_gross:,.2f}")
+    print(f"$100,000 strategy (net) would be     ${strat_end_value_net:,.2f}")
     print("-" * 80)
     print(f"Gross  Profit Factor : {pf_gross:.4f}")
     print(f"Gross  Sharpe (log)  : {sharpe_gross:.4f}")
     # print(f"Gross  % Log Return  : {pct_return_log_gross:.2f}%")
     print(f"Gross  % Simple Ret  : {pct_return_simple_gross:.2f}%")
     print("-")
-    print(f"Net    Profit Factor : {pf_net:.4f}   (fees={fee_bps}bps, slip={slippage_bps}bps per side)")
+    print(f"Net    Profit Factor : {pf_net:.4f}   (fees={effective_fee_bps}bps, slip={effective_slippage_bps}bps per side)")
     print(f"Net    Sharpe (log)  : {sharpe_net:.4f}")
     # print(f"Net    % Log Return  : {pct_return_log_net:.2f}%")
     print(f"Net    % Simple Ret  : {pct_return_simple_net:.2f}%")
@@ -364,7 +380,7 @@ def plot_cumulative_returns(
         # ax1.set_yscale("log")
         ax1.set_xlabel("Date")
         ax1.set_ylabel("Cumulative Simple Return")
-        ax1.set_title("Cumulative Returns (Gross vs Net)")
+        ax1.set_title(f"Cumulative Returns (Gross vs Net) [{_mode.upper()}]")
 
         # Secondary axis for actual asset price
         # ax2 = ax1.twinx()
@@ -432,10 +448,11 @@ def plot_cumulative_returns(
                 "asset": asset,
                 "timeframe": timeframe,
                 "price_column": price_column,
-                "fee_bps": fee_bps,
-                "slippage_bps": slippage_bps,
+                "fee_bps": effective_fee_bps,
+                "slippage_bps": effective_slippage_bps,
                 "strategy_kwargs": strategy_kwargs,
                 "rolling_window_bars": window_bars,
+                "instrument_mode": _mode,
             },
             "metrics": {
                 "pf_gross": pf_gross,
@@ -517,6 +534,7 @@ def main():
     parser.add_argument("--fee_bps", type=float, default=0.0, help="Per-side fee in basis points")
     parser.add_argument("--slippage_bps", type=float, default=0.0, help="Per-side slippage in basis points")
     parser.add_argument("--save_json_dir", type=str, default=None, help="Directory to save JSON report")
+    parser.add_argument("--mode", type=str, default="spot", choices=["spot","futures"], help="Instrument mode: spot or futures")
     args = parser.parse_args()
 
     plot_cumulative_returns(
@@ -529,6 +547,7 @@ def main():
         fee_bps=args.fee_bps,
         slippage_bps=args.slippage_bps,
         save_json_dir=args.save_json_dir,
+        mode=args.mode,
     )
 
 
@@ -668,10 +687,10 @@ ml_params_geminipro25 = { # pvalue 0.62, N=50
 ml_params = {
     # "interval": "1h",
     # "forecast_horizon_hours": 1,
-    "interval": "1m",
+    "interval": "5m",
     "forecast_horizon_hours": 1,    
     "n_epochs": 200,
-    "hidden_sizes": (32, 16, 8),
+    "hidden_sizes": (64, 32, 16),
     "signal_percentiles": (10, 90),
     "train_ratio": 0.8,
     "val_ratio": 0.2,
@@ -684,9 +703,13 @@ ml_params = {
     "hold_until_opposite": True,
     #
     "sma_windows": (4, 8, 16),
-    "volatility_windows": (4, 8, 16),
+    "volatility_windows": (16, 32),
     "momentum_windows": (4, 8, 16),
-    "rsi_windows": (4, 8, 16),
+    "rsi_windows": (16, 24, 32),
+    # "sma_windows": (4, 8, 16),
+    # "volatility_windows": (4, 8, 16),
+    # "momentum_windows": (4, 8, 16),
+    # "rsi_windows": (4, 8, 16),    
     # "sma_windows": (5, 10, 20, 30),
     # "volatility_windows": (5, 10, 20, 30),
     # "momentum_windows": (7, 14, 21, 30),
@@ -699,7 +722,7 @@ if __name__ == "__main__":
     # main()
 
     plot_cumulative_returns(
-        start_date="2018-07-25",
+        start_date="2020-02-14",
         end_date="2024-10-31",
         # strategy_name="ma",
         strategy_name="ml",
@@ -707,7 +730,7 @@ if __name__ == "__main__":
         timeframe="4h",
         show_plot=False,
         strategy_kwargs=ml_params,
-        price_column="vwap_10",
+        price_column="vwap_20",
         fee_bps=10.0,
         slippage_bps=10.0,
         save_json_dir="reports/example_run",
@@ -715,6 +738,7 @@ if __name__ == "__main__":
         position_sizing_params={
             "fraction": 0.1,
         },
+        mode="futures",
         # position_sizing_mode="fixed_notional",
         # position_sizing_params={
         #     "fixed_notional": 0.1,

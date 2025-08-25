@@ -144,6 +144,7 @@ class WalkForward:
         position_sizing_mode: str = "full_notional",
         position_sizing_params: dict | None = None,
         parallel: bool = True,
+        mode: str = "spot",
     ) -> None:
         self.start_date = start_date
         self.end_date = end_date
@@ -160,6 +161,7 @@ class WalkForward:
         self.position_sizing_mode = position_sizing_mode
         self.position_sizing_params = position_sizing_params or {}
         self.parallel = parallel
+        self.mode = (mode or "spot").strip().lower()
 
         if strategy_name not in aVAILABLE_STRATEGIES:
             raise ValueError(
@@ -175,7 +177,8 @@ class WalkForward:
     # ------------------------------------------------------------------ #
 
     def _get_full_filepath(self) -> Path:
-        return Path(f"data/ohlcv_{self.asset}_{self.timeframe}.parquet")
+        base_dir = Path("data/futures") if (self.mode or "spot").strip().lower() == "futures" else Path("data/spot")
+        return base_dir / f"ohlcv_{self.asset}_{self.timeframe}.parquet"
 
     def _load_raw(self) -> pd.DataFrame:
         df = pd.read_parquet(self._get_full_filepath())
@@ -276,7 +279,7 @@ class WalkForward:
         print("")
         print("="*100)
         print(
-            f"Calculating walk-forward signals for real data from {self.start_date} to {self.end_date}"
+            f"Calculating walk-forward signals for real data from {self.start_date} to {self.end_date} | Mode: {self.mode.upper()}"
         )
         print(f"Train lookback: {self.train_lookback} periods (~{self.train_lookback / bars_per_year:.2f} years)")
         print(f"Train step: {self.train_step} periods (~{self.train_step / bars_per_day:.1f} days)")
@@ -300,7 +303,8 @@ class WalkForward:
         real_df["strategy_simple_r"] = real_df["simple_r"] * real_df["weight"]
 
         # Costs
-        fee_rate = (self.fee_bps + self.slippage_bps) / 10000.0
+        effective_fee_bps = float(self.fee_bps) if self.fee_bps and self.fee_bps > 0 else (4.0 if self.mode == "futures" else 10.0)
+        fee_rate = (effective_fee_bps + float(self.slippage_bps)) / 10000.0
         real_df["turnover"] = (real_df["weight"].diff().abs()).fillna(real_df["weight"].abs())
         real_df["cost_simple"] = fee_rate * real_df["turnover"]
         real_df["strategy_simple_r_net"] = real_df["strategy_simple_r"] - real_df["cost_simple"]
@@ -434,7 +438,7 @@ class WalkForward:
         print(f"Avg win (net): {avg_win_net_pct:.2f}%")
         print(f"Avg loss (net): {avg_loss_net_pct:.2f}%")
         print(f"OOS real Profit Factor (gross): {real_pf_gross:.4f}")
-        print(f"OOS real Profit Factor (net)  : {real_pf_net:.4f}  (fees={self.fee_bps}bps, slip={self.slippage_bps}bps per side)")
+        print(f"OOS real Profit Factor (net)  : {real_pf_net:.4f}  (fees={effective_fee_bps}bps, slip={self.slippage_bps}bps per side)")
         print(f"OOS real Sharpe Ratio (gross)  : {sr_gross:.2f}")
         print(f"OOS real Sharpe Ratio (net)    : {sr_net:.2f}")
         print("=" * 100)
@@ -450,7 +454,7 @@ class WalkForward:
             ax1.plot(real_df["strategy_r_net"].cumsum(), label="Strategy Net (log)")
             ax1.set_xlabel("Date")
             ax1.set_ylabel("Cumulative Log Return")
-            ax1.set_title("Walk-Forward OOS (Gross vs Net)")
+            ax1.set_title(f"Walk-Forward OOS (Gross vs Net) [{self.mode.upper()}]")
             ax2 = ax1.twinx()
             ax2.plot(real_df.index, real_df[self.price_column], color="gray", alpha=0.25, label="Asset Price")
             ax2.set_ylabel("Price")
@@ -526,11 +530,12 @@ class WalkForward:
                     "asset": self.asset,
                     "timeframe": self.timeframe,
                     "price_column": self.price_column,
-                    "fee_bps": self.fee_bps,
+                    "fee_bps": effective_fee_bps,
                     "slippage_bps": self.slippage_bps,
                     "train_lookback": self.train_lookback,
                     "train_step": self.train_step,
                     "strategy_kwargs": self.strategy_kwargs,
+                    "instrument_mode": self.mode,
                 },
                 "metrics": {
                     "pf_gross": float(real_pf_gross),
@@ -607,6 +612,7 @@ def main():
     parser.add_argument("--fee_bps", type=float, default=0.0, help="Per-side fee in basis points")
     parser.add_argument("--slippage_bps", type=float, default=0.0, help="Per-side slippage in basis points")
     parser.add_argument("--save_json_dir", type=str, default=None, help="Directory to save JSON report")
+    parser.add_argument("--mode", type=str, default="spot", choices=["spot","futures"], help="Instrument mode: spot or futures")
     args = parser.parse_args()
 
     tester = WalkForward(
@@ -620,6 +626,7 @@ def main():
         generate_plot=args.plot,
         fee_bps=args.fee_bps,
         slippage_bps=args.slippage_bps,
+        mode=args.mode,
     )
     tester.run(save_json_dir=args.save_json_dir)
 
@@ -671,13 +678,14 @@ if __name__ == "__main__":
         train_step=_step_bars,
         generate_plot=True,
         strategy_kwargs=ml_params,
-        price_column="vwap_10",
+        price_column="vwap_20",
         fee_bps=10.0,
         slippage_bps=10.0,
         position_sizing_mode="fixed_fraction",
         position_sizing_params={
             "fraction": 0.1,
         },        
+        mode="futures",
     )
     tester.run(save_json_dir="reports/example_run")
 

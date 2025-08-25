@@ -88,16 +88,23 @@ def _ensure_price_column_exists(df: pd.DataFrame, price_column: str) -> pd.DataF
             return df
         raise KeyError("Cannot create 'typical' column: missing 'high', 'low' or 'close'.")
 
-    if col == "vwap":
+    # Support VWAP with optional window via names like 'vwap', 'vwap_50', or 'vwap50'
+    if col.startswith("vwap"):
         required = ["high", "low", "close", "volume"]
         if all(c in df.columns for c in required):
-            vwap_window = 20
+            suffix = col[4:]
+            if suffix.startswith("_") or suffix.startswith("-"):
+                suffix = suffix[1:]
+            if suffix.isdigit() and len(suffix) > 0:
+                vwap_window = int(suffix)
+            else:
+                vwap_window = 20
             typical_price = (df["high"] + df["low"] + df["close"]) / 3
             tpv = typical_price * df["volume"]
             cumulative_tpv = tpv.rolling(window=vwap_window, min_periods=1).sum()
             cumulative_volume = df["volume"].rolling(window=vwap_window, min_periods=1).sum()
             df[col] = (cumulative_tpv / cumulative_volume).fillna(method="ffill")
-            print(f"--- Created rolling 'vwap' ({vwap_window}-bar) column on-the-fly. ---")
+            print(f"--- Created rolling '{col}' ({vwap_window}-bar) column on-the-fly. ---")
             return df
         raise KeyError("Cannot create 'vwap' column: missing one of 'high','low','close','volume'.")
 
@@ -121,8 +128,10 @@ def _compute_single_perm_pf_net(
     perm_start_index: int,
     position_sizing_mode: str = "full_notional",
     position_sizing_params: dict | None = None,
+    mode: str = "spot",
 ) -> float:
-    full_fp = Path(f"data/ohlcv_{asset}_{timeframe}.parquet")
+    base_dir = Path("data/futures") if (mode or "spot").strip().lower() == "futures" else Path("data/spot")
+    full_fp = base_dir / f"ohlcv_{asset}_{timeframe}.parquet"
     full_df = pd.read_parquet(full_fp)
     # Normalize to UTC-naive to avoid tz-aware comparisons downstream
     if not isinstance(full_df.index, pd.DatetimeIndex):
@@ -153,7 +162,9 @@ def _compute_single_perm_pf_net(
     perm_df["strategy_r"] = perm_df["r"] * perm_df["weight"]
     perm_df["strategy_simple_r"] = perm_df["simple_r"] * perm_df["weight"]
 
-    fee_rate = (fee_bps + slippage_bps) / 10000.0
+    _mode = (mode or "spot").strip().lower()
+    effective_fee_bps = float(fee_bps) if fee_bps and fee_bps > 0 else (4.0 if _mode == "futures" else 10.0)
+    fee_rate = (effective_fee_bps + float(slippage_bps)) / 10000.0
     turnover = (perm_df["weight"].diff().abs()).fillna(perm_df["weight"].abs())
     perm_df["cost_simple"] = fee_rate * turnover
     perm_df["strategy_simple_r_net"] = perm_df["strategy_simple_r"] - perm_df["cost_simple"]
@@ -185,6 +196,7 @@ class InSampleMCTester:
         slippage_bps: float = 0.0,
         position_sizing_mode: str = "full_notional",
         position_sizing_params: dict | None = None,
+        mode: str = "spot",
     ) -> None:
         self.start_date = start_date
         self.end_date = end_date
@@ -201,6 +213,7 @@ class InSampleMCTester:
         self.save_json_dir: str | None = None
         self.position_sizing_mode = position_sizing_mode
         self.position_sizing_params = position_sizing_params or {}
+        self.mode = (mode or "spot").strip().lower()
 
         if strategy_name not in aVAILABLE_STRATEGIES:
             raise ValueError(
@@ -215,7 +228,8 @@ class InSampleMCTester:
     # ------------------------------------------------------------------ #
 
     def _get_full_filepath(self) -> Path:
-        return Path(f"data/ohlcv_{self.asset}_{self.timeframe}.parquet")
+        base_dir = Path("data/futures") if (self.mode or "spot").strip().lower() == "futures" else Path("data/spot")
+        return base_dir / f"ohlcv_{self.asset}_{self.timeframe}.parquet"
 
     def _load_raw(self) -> pd.DataFrame:
         df = pd.read_parquet(self._get_full_filepath())
@@ -244,7 +258,7 @@ class InSampleMCTester:
         train_df = self.get_df()
         train_df = _ensure_price_column_exists(train_df, self.price_column)
         print("=" * 100)
-        print(f"Optimising strategy '{self.strategy_name}' on in-sample data")
+        print(f"Optimising strategy '{self.strategy_name}' on in-sample data | Mode: {self.mode.upper()}")
         print(f"from {self.start_date} to {self.end_date}")
         print("=" * 100, "\n")
 
@@ -273,7 +287,8 @@ class InSampleMCTester:
         train_df["strategy_simple_r"] = train_df["simple_r"] * train_df["weight"]
 
         # Fees and slippage
-        fee_rate = (self.fee_bps + self.slippage_bps) / 10000.0
+        effective_fee_bps = float(self.fee_bps) if self.fee_bps and self.fee_bps > 0 else (4.0 if self.mode == "futures" else 10.0)
+        fee_rate = (effective_fee_bps + float(self.slippage_bps)) / 10000.0
         turnover = (train_df["weight"].diff().abs()).fillna(train_df["weight"].abs())
         train_df["cost_simple"] = fee_rate * turnover
         train_df["strategy_simple_r_net"] = train_df["strategy_simple_r"] - train_df["cost_simple"]
@@ -284,7 +299,7 @@ class InSampleMCTester:
         
         # This is the value we will compare against.
         print(f"Calculated In-Sample PF (gross): {best_real_pf_gross:.4f}")
-        print(f"Calculated In-Sample PF (net)  : {best_real_pf_net:.4f}  (fees={self.fee_bps}bps, slip={self.slippage_bps}bps per side)")
+        print(f"Calculated In-Sample PF (net)  : {best_real_pf_net:.4f}  (fees={effective_fee_bps}bps, slip={self.slippage_bps}bps per side)")
 
 
         print("Running Monte-Carlo permutations (parallel)…")
@@ -307,6 +322,7 @@ class InSampleMCTester:
                         repeat(self.perm_start_index),
                         repeat(self.position_sizing_mode),
                         repeat(self.position_sizing_params),
+                        repeat(self.mode),
                     ),
                     total=len(seeds),
                 )
@@ -363,8 +379,9 @@ class InSampleMCTester:
                     "asset": self.asset,
                     "timeframe": self.timeframe,
                     "price_column": self.price_column,
-                    "fee_bps": self.fee_bps,
+                    "fee_bps": effective_fee_bps,
                     "slippage_bps": self.slippage_bps,
+                    "instrument_mode": self.mode,
                     "n_perm": self.n_perm,
                     "strategy_kwargs": self.strategy_kwargs,
                 },
@@ -409,6 +426,7 @@ def main():
     parser.add_argument("--fee_bps", type=float, default=0.0, help="Per-side fee in basis points")
     parser.add_argument("--slippage_bps", type=float, default=0.0, help="Per-side slippage in basis points")
     parser.add_argument("--save_json_dir", type=str, default=None, help="Directory to save JSON report")
+    parser.add_argument("--mode", type=str, default="spot", choices=["spot","futures"], help="Instrument mode: spot or futures")
     args = parser.parse_args()
 
     tester = InSampleMCTester(
@@ -421,6 +439,7 @@ def main():
         generate_plot=args.plot,
         fee_bps=args.fee_bps,
         slippage_bps=args.slippage_bps,
+        mode=args.mode,
     )
     tester.run(save_json_dir=args.save_json_dir)
 
@@ -458,23 +477,24 @@ if __name__ == "__main__":
 
 
     tester = InSampleMCTester(
-        start_date="2018-07-25",
+        start_date="2020-02-14",
         end_date="2024-10-31",
-        strategy_name="ml",
+        strategy_name="donchian",
         asset="VETUSD",
-        timeframe="4h",
-        n_perm=100,
+        timeframe="1h",
+        n_perm=20,
         generate_plot=True,
         # strategy_kwargs=ml_params,
         # strategy_kwargs=ml_params_conservative,
         # strategy_kwargs=ml_params_mc_safe,
-        strategy_kwargs=ml_params,
-        price_column="vwap",
+        # strategy_kwargs=ml_params,
+        price_column="vwap_10",
         fee_bps=10.0,
         slippage_bps=10.0,
         position_sizing_mode="fixed_fraction",
         position_sizing_params={
             "fraction": 0.1,
         },        
+        mode="futures",
     )
     tester.run(save_json_dir="reports/example_run")

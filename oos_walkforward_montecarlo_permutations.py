@@ -125,8 +125,10 @@ def _compute_single_perm_pf_net_oos(
     perm_start_index: int,
     position_sizing_mode: str = "full_notional",
     position_sizing_params: dict | None = None,
+    mode: str = "spot",
 ) -> float:
-    full_fp = Path(f"data/ohlcv_{asset}_{timeframe}.parquet")
+    base_dir = Path("data/futures") if (mode or "spot").strip().lower() == "futures" else Path("data/spot")
+    full_fp = base_dir / f"ohlcv_{asset}_{timeframe}.parquet"
     full_df = pd.read_parquet(full_fp)
     # Normalize datetime index to UTC-naive for consistent comparisons
     if not isinstance(full_df.index, pd.DatetimeIndex):
@@ -169,7 +171,9 @@ def _compute_single_perm_pf_net_oos(
     )
     wf_df["strategy_r"] = wf_df["r"] * wf_df["weight"]
     wf_df["strategy_simple_r"] = wf_df["simple_r"] * wf_df["weight"]
-    fee_rate = (fee_bps + slippage_bps) / 10000.0
+    _mode = (mode or "spot").strip().lower()
+    effective_fee_bps = float(fee_bps) if fee_bps and fee_bps > 0 else (4.0 if _mode == "futures" else 10.0)
+    fee_rate = (effective_fee_bps + float(slippage_bps)) / 10000.0
     wf_df["turnover"] = (wf_df["weight"].diff().abs()).fillna(wf_df["weight"].abs())
     wf_df["cost_simple"] = fee_rate * wf_df["turnover"]
     wf_df["strategy_simple_r_net"] = wf_df["strategy_simple_r"] - wf_df["cost_simple"]
@@ -203,6 +207,7 @@ class WalkForwardMCTester:
         slippage_bps: float = 0.0,
         position_sizing_mode: str = "full_notional",
         position_sizing_params: dict | None = None,
+        mode: str = "spot",
     ) -> None:
         self.start_date = start_date
         self.end_date = end_date
@@ -225,6 +230,7 @@ class WalkForwardMCTester:
         self.slippage_bps = slippage_bps
         self.position_sizing_mode: str = position_sizing_mode
         self.position_sizing_params: dict = position_sizing_params or {}
+        self.mode = (mode or "spot").strip().lower()
 
         self.perm_start_index = self._get_perm_start_index(start_date)
         print(f"Permutation start index: {self.perm_start_index}")
@@ -234,7 +240,8 @@ class WalkForwardMCTester:
     # ------------------------------------------------------------------ #
 
     def _get_full_filepath(self) -> Path:
-        return Path(f"data/ohlcv_{self.asset}_{self.timeframe}.parquet")
+        base_dir = Path("data/futures") if (self.mode or "spot").strip().lower() == "futures" else Path("data/spot")
+        return base_dir / f"ohlcv_{self.asset}_{self.timeframe}.parquet"
 
     def _load_raw(self) -> pd.DataFrame:
         df = pd.read_parquet(self._get_full_filepath())
@@ -386,7 +393,7 @@ class WalkForwardMCTester:
         real_df = self.get_df()
         real_df = self._ensure_price_column_exists(real_df)
         print(
-            f"Calculating walk-forward signals for real data from {self.start_date} to {self.end_date}"
+            f"Calculating walk-forward signals for real data from {self.start_date} to {self.end_date} | Mode: {self.mode.upper()}"
         )
 
         real_signals = self._walkforward_signals(real_df)
@@ -404,7 +411,8 @@ class WalkForwardMCTester:
         real_df["strategy_r"] = real_df["r"] * real_df["weight"]
         real_df["strategy_simple_r"] = real_df["simple_r"] * real_df["weight"]
         # Costs
-        fee_rate = (self.fee_bps + self.slippage_bps) / 10000.0
+        effective_fee_bps = float(self.fee_bps) if self.fee_bps and self.fee_bps > 0 else (4.0 if self.mode == "futures" else 10.0)
+        fee_rate = (effective_fee_bps + float(self.slippage_bps)) / 10000.0
         turnover = (real_df["weight"].diff().abs()).fillna(real_df["weight"].abs())
         real_df["cost_simple"] = fee_rate * turnover
         real_df["strategy_simple_r_net"] = real_df["strategy_simple_r"] - real_df["cost_simple"]
@@ -467,7 +475,8 @@ class WalkForwardMCTester:
         real_df["strategy_r"] = real_df["r"] * real_df["weight"]
         real_df["strategy_simple_r"] = real_df["simple_r"] * real_df["weight"]
         # Costs
-        fee_rate = (self.fee_bps + self.slippage_bps) / 10000.0
+        effective_fee_bps = float(self.fee_bps) if self.fee_bps and self.fee_bps > 0 else (4.0 if self.mode == "futures" else 10.0)
+        fee_rate = (effective_fee_bps + float(self.slippage_bps)) / 10000.0
         turnover = (real_df["weight"].diff().abs()).fillna(real_df["weight"].abs())
         real_df["cost_simple"] = fee_rate * turnover
         real_df["strategy_simple_r_net"] = real_df["strategy_simple_r"] - real_df["cost_simple"]
@@ -503,6 +512,7 @@ class WalkForwardMCTester:
                         repeat(self.perm_start_index),
                         repeat(self.position_sizing_mode),
                         repeat(self.position_sizing_params),
+                        repeat(self.mode),
                     ),
                     total=len(seeds),
                 )
@@ -525,7 +535,7 @@ class WalkForwardMCTester:
             plt.axvline(real_pf_net, color="red", linewidth=2, label=f"Real Net (PF={real_pf_net:.2f})")
             plt.xlabel("Profit Factor")
             plt.ylabel("Frequency")
-            plt.title(f"Walk-Forward OOS MC Permutations (net PF, p={p_val:.3f}, N={self.n_perm})")
+            plt.title(f"Walk-Forward OOS MC Permutations (net PF, p={p_val:.3f}, N={self.n_perm}) [{self.mode.upper()}]")
             plt.legend()
             plt.grid(True, alpha=0.3)
             plt.show()
@@ -542,7 +552,7 @@ class WalkForwardMCTester:
                     "asset": self.asset,
                     "timeframe": self.timeframe,
                     "price_column": self.price_column,
-                    "fee_bps": self.fee_bps,
+                    "fee_bps": effective_fee_bps,
                     "slippage_bps": self.slippage_bps,
                     "train_lookback": self.train_lookback,
                     "train_step": self.train_step,
@@ -550,6 +560,7 @@ class WalkForwardMCTester:
                     "strategy_kwargs": self.strategy_kwargs,
                     "position_sizing_mode": self.position_sizing_mode,
                     "position_sizing_params": self.position_sizing_params,
+                    "instrument_mode": self.mode,
                 },
                 "metrics": {
                     "pf_gross": float(real_pf),
@@ -582,6 +593,7 @@ def main():
     parser.add_argument("--fee_bps", type=float, default=0.0, help="Per-side fee in basis points")
     parser.add_argument("--slippage_bps", type=float, default=0.0, help="Per-side slippage in basis points")
     parser.add_argument("--save_json_dir", type=str, default=None, help="Directory to save JSON report")
+    parser.add_argument("--mode", type=str, default="spot", choices=["spot","futures"], help="Instrument mode: spot or futures")
     args = parser.parse_args()
 
     tester = WalkForwardMCTester(
@@ -596,6 +608,7 @@ def main():
         generate_plot=args.plot,
         fee_bps=args.fee_bps,
         slippage_bps=args.slippage_bps,
+        mode=args.mode,
     )
     tester.run(save_json_dir=args.save_json_dir)
 

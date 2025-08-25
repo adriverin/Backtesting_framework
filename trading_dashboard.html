@@ -203,7 +203,19 @@
 		const tradePaths = dates.map(d => `logs/trades_${d}.ndjson`);
 		const acctPaths = dates.map(d => `logs/account_${d}.ndjson`);
 		const barPaths = dates.map(d => `logs/bars_${sym}_${tf}_${d}.ndjson`);
-		const [trades, bars, acct] = await Promise.all([ fetchMany(tradePaths), fetchMany(barPaths), fetchMany(acctPaths) ]);
+		const runPaths = dates.map(d => `logs/run_${d}.ndjson`);
+		const [trades, bars, acct, runs] = await Promise.all([ fetchMany(tradePaths), fetchMany(barPaths), fetchMany(acctPaths), fetchMany(runPaths) ]);
+		// Update session badge with mode if available
+		try {
+			const latestRun = runs
+				.filter(r => (r.config?.symbol || '').toUpperCase() === sym.toUpperCase() && (r.config?.timeframe || '') === tf)
+				.sort((a,b) => (a.timestamp || '').localeCompare(b.timestamp || ''))
+				.pop();
+			if (latestRun) {
+				const mode = (latestRun.config?.instrument_mode || 'spot').toUpperCase();
+				document.getElementById('session_info').textContent = `${sym} ${tf} [${mode}]`;
+			}
+		} catch {}
 		renderFeed(trades, sym);
 		renderCandlesAndTrades(bars, trades, sym, tf);
 		renderEquityFromAccount(acct);
