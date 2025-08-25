@@ -77,14 +77,17 @@ def main():
 	parser.add_argument("--symbol", required=True, help="Asset symbol like VET-USD, VETUSD, or VET/USDT")
 	parser.add_argument("--interval", required=True, choices=["1m","5m","15m","1h","4h","1d"], help="Bar interval")
 	parser.add_argument("--poll", type=int, default=30, help="Polling seconds between updates")
+	parser.add_argument("--mode", type=str, default="spot", choices=["spot","futures"], help="Instrument mode: spot or futures (USDT-M)")
 	args = parser.parse_args()
 
 	sym_ccxt = _normalize_symbol_for_binance(args.symbol)  # e.g., 'VET/USDT'
 	sym_file = _normalize_symbol_for_filename(args.symbol)  # e.g., 'VETUSD'
-	parquet_path = Path(f"data/ohlcv_{sym_file}_{args.interval}.parquet")
+	base_dir = Path("data/futures") if args.mode.strip().lower() == "futures" else Path("data/spot")
+	parquet_path = base_dir / f"ohlcv_{sym_file}_{args.interval}.parquet"
 	parquet_path.parent.mkdir(parents=True, exist_ok=True)
 
-	print(f"[feeder-ccxt] Writing to {parquet_path} | source=Binance via ccxt | symbol={sym_ccxt} interval={args.interval} poll={args.poll}s")
+	venue = "Binance USDT-M Futures" if args.mode.strip().lower() == "futures" else "Binance Spot"
+	print(f"[feeder-ccxt] Writing to {parquet_path} | source={venue} via ccxt | symbol={sym_ccxt} interval={args.interval} poll={args.poll}s mode={args.mode}")
 
 	# Determine expected bar delta
 	_, expected_delta = _interval_to_pandas_rule(args.interval)
@@ -109,7 +112,30 @@ def main():
 				since_ms = int((datetime.now(timezone.utc) - expected_delta * 1500).timestamp() * 1000)
 
 			# Fetch from 'since' forward (may return multiple pages)
-			new_df = _fetch_from_since(sym_ccxt, args.interval, since_ms)
+			# For futures, use binanceusdm; for spot, use binance
+			try:
+				import ccxt  # type: ignore
+				exchange = ccxt.binanceusdm({"enableRateLimit": True}) if args.mode.strip().lower() == "futures" else ccxt.binance({"enableRateLimit": True})
+				raw_rows = []
+				cur = since_ms
+				while True:
+					chunk = exchange.fetch_ohlcv(sym_ccxt, timeframe=args.interval, since=cur, limit=1000)
+					if not chunk:
+						break
+					raw_rows.extend(chunk)
+					last_ts = chunk[-1][0]
+					if last_ts is None:
+						break
+					cur = int(last_ts) + 1
+					if len(chunk) < 1000:
+						break
+				new_df = pd.DataFrame(raw_rows, columns=["timestamp","open","high","low","close","volume"]).set_index("timestamp")
+				if not new_df.empty:
+					new_df.index = pd.to_datetime(new_df.index, unit="ms", utc=True).tz_convert("UTC").tz_localize(None)
+					new_df = new_df.sort_index()
+			except Exception as _e:
+				print(f"[feeder-ccxt] fetch ERROR: {_e}")
+				new_df = pd.DataFrame()
 			if parquet_path.exists():
 				existing = pd.read_parquet(parquet_path)
 				existing = _ensure_datetime_index(existing)

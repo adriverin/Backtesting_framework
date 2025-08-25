@@ -45,11 +45,15 @@ class TradeConfig:
 	sim_loop: bool = False  # if True, loop over historical bars indefinitely
 	base_qty: float = 0.001  # default simulated base amount per buy
 	dashboard_tf: Optional[str] = None  # Extra timeframe to log for the dashboard (e.g., '1h')
+	instrument_mode: str = "spot"  # 'spot' (default) or 'futures'
+	fee_bps: Optional[float] = None  # override per-side fee in bps; if None, use mode default
 
 
 def load_latest_ohlcv(asset: str, timeframe: str) -> pd.DataFrame:
 	"""Load local OHLCV parquet prepared by backtests."""
-	path = f"data/ohlcv_{asset}_{timeframe}.parquet"
+	mode_env = os.environ.get("INSTRUMENT_MODE", "spot").strip().lower()
+	base_dir = "data/futures" if mode_env == "futures" else "data/spot"
+	path = f"{base_dir}/ohlcv_{asset}_{timeframe}.parquet"
 	if not os.path.exists(path):
 		raise FileNotFoundError(path)
 	df = pd.read_parquet(path)
@@ -117,6 +121,8 @@ def main() -> None:
 		sim_loop=(os.environ.get("SIM_LOOP", "0") == "1"),
 		base_qty=float(os.environ.get("BASE_QTY", "40000")),
 		dashboard_tf=os.environ.get("DASHBOARD_TF", None),
+		instrument_mode=os.environ.get("INSTRUMENT_MODE", "spot").strip().lower(),
+		fee_bps=(float(os.environ.get("FEE_BPS")) if os.environ.get("FEE_BPS") is not None else None),
 	)
 
 	logger = NDJSONLogger(logs_dir=cfg.logs_dir, strategy_id=f"{cfg.strategy_name}_params", is_paper=cfg.paper)
@@ -126,7 +132,13 @@ def main() -> None:
 		run_id=run_id,
 		version="dev",
 		mode="PAPER" if cfg.paper else "LIVE",
-		config={"symbol": cfg.symbol, "timeframe": cfg.timeframe, "dashboard_tf": cfg.dashboard_tf},
+		config={
+			"symbol": cfg.symbol,
+			"timeframe": cfg.timeframe,
+			"dashboard_tf": cfg.dashboard_tf,
+			"instrument_mode": cfg.instrument_mode,
+			"fee_bps_used": (cfg.fee_bps if cfg.fee_bps is not None else (4.0 if cfg.instrument_mode == "futures" else 10.0)),
+		},
 	)
 
 	asset = cfg.symbol.replace("USDT", "USD") if cfg.symbol.endswith("USDT") else cfg.symbol
@@ -147,6 +159,10 @@ def main() -> None:
 	signal_state_path = os.path.join(cfg.logs_dir, f"state_{cfg.symbol}_{cfg.timeframe}.json")
 
 	client = make_client()
+
+	# Determine effective per-side fee rate (bps → fraction) for simulated fills
+	_effective_fee_bps = cfg.fee_bps if (cfg.fee_bps is not None) else (4.0 if cfg.instrument_mode == "futures" else 10.0)
+	_effective_fee_rate = float(_effective_fee_bps) / 10000.0
 
 	try:
 		# Restore previous state if available
@@ -319,10 +335,11 @@ def main() -> None:
 								"qty": base_qty,
 								"quote_qty": base_qty * price,
 								"fee_asset": cfg.quote_asset,
-								"fee_amount": 0.0,
+								"fee_amount": (base_qty * price * _effective_fee_rate),
 							}
 						]
 					}
+					fees_quote += (base_qty * price * _effective_fee_rate)
 				# Synchronize order display fields from execution
 				order["status"] = "FILLED"
 				order["quote_quantity"] = float(execution.get("cumulative_quote_qty", base_qty * price))
@@ -402,10 +419,11 @@ def main() -> None:
 								"qty": close_qty,
 								"quote_qty": close_qty * price,
 								"fee_asset": cfg.quote_asset,
-								"fee_amount": 0.0,
+								"fee_amount": (close_qty * price * _effective_fee_rate),
 							}
 						]
 					}
+					fees_quote += (close_qty * price * _effective_fee_rate)
 				# Synchronize order display fields from execution
 				order["status"] = "FILLED"
 				order["quote_quantity"] = float(execution.get("cumulative_quote_qty", close_qty * price))

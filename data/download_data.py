@@ -62,7 +62,7 @@ def _interval_to_ccxt(interval: str) -> str:
     return interval
 
 
-def _download_ohlcv(symbol_binance: str, start: str, end: str, interval: str) -> pd.DataFrame:
+def _download_ohlcv(symbol_binance: str, start: str, end: str, interval: str, mode: str = "spot") -> pd.DataFrame:
     """Download OHLCV from Binance via ccxt over a date range.
 
     Returns a DataFrame with columns: open, high, low, close, volume and a UTC-naive DatetimeIndex.
@@ -82,7 +82,8 @@ def _download_ohlcv(symbol_binance: str, start: str, end: str, interval: str) ->
     start_ms = int(start_dt.timestamp() * 1000)
     end_ms = int(end_dt.timestamp() * 1000)
 
-    exchange = ccxt.binance({"enableRateLimit": True})
+    _mode = (mode or "spot").strip().lower()
+    exchange = ccxt.binanceusdm({"enableRateLimit": True}) if _mode == "futures" else ccxt.binance({"enableRateLimit": True})
     all_rows: list[list[float]] = []
 
     # Compute step based on interval to advance reliably
@@ -143,6 +144,7 @@ def create_maximum_cache_for_assets(
     start: str = "2017-01-01",
     end: str = "2025-12-31",
     create_info_file: bool = True,
+    mode: str = "spot",
 ) -> Dict[str, dict]:
     """
     Download OHLCV for multiple assets and save under data/ with the framework's naming:
@@ -151,7 +153,9 @@ def create_maximum_cache_for_assets(
     """
     import json
 
-    print(f"🗄️  Creating OHLCV cache files for {len(assets)} assets (Binance via ccxt)")
+    _mode = (mode or "spot").strip().lower()
+    venue = "Binance USDT-M Futures" if _mode == "futures" else "Binance Spot"
+    print(f"🗄️  Creating OHLCV cache files for {len(assets)} assets ({venue} via ccxt)")
     print(f"📅 Requested range: {start} to {end} ({interval} interval)")
     print("=" * 70)
 
@@ -167,7 +171,7 @@ def create_maximum_cache_for_assets(
         "assets": {},
     }
 
-    cache_dir = Path("")
+    cache_dir = Path("data/futures") if _mode == "futures" else Path("data/spot")
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     rule_str, expected_delta = _interval_to_pandas_rule(interval)
@@ -255,7 +259,7 @@ def create_maximum_cache_for_assets(
             else:
                 effective_start = start
 
-            df_new = _download_ohlcv(symbol_binance, start=effective_start, end=end, interval=interval)
+            df_new = _download_ohlcv(symbol_binance, start=effective_start, end=end, interval=interval, mode=_mode)
 
             if df_existing is not None and not df_existing.empty and not df_new.empty:
                 df_combined = pd.concat([df_existing, df_new])
@@ -373,43 +377,44 @@ def create_maximum_cache_for_assets(
 
 if __name__ == "__main__":
     # time_intervals = ["1m", "5m", "15m", "4h", "1d"]
-    time_intervals = ["1m"]
+    time_intervals = ["5m", "15m", "1h", "4h", "1d"]
     # time_intervals = ["5m","15m"]
 
     for tf in time_intervals:
         print(f"Getting max cached for {tf}")
         create_maximum_cache_for_assets(
             assets=[
-                # "BTC-USD",
-                # "ETH-USD",
-                # "SOL-USD",
-                # "ADA-USD",
-                # "AVAX-USD",
-                # "BNB-USD",
-                # "XRP-USD",
-                # "LTC-USD",
-                # "LINK-USD",
-                # "XLM-USD",
-                # "ATOM-USD",
-                # "HBAR-USD",
-                # "BCH-USD",
-                # "DOT-USD",
-                # "UNI-USD",
-                # "AAVE-USD",
-                # "SCRT-USD",
-                # "ALGO-USD",
+                "BTC-USD",
+                "ETH-USD",
+                "SOL-USD",
+                "ADA-USD",
+                "AVAX-USD",
+                "BNB-USD",
+                "XRP-USD",
+                "LTC-USD",
+                "LINK-USD",
+                "XLM-USD",
+                "ATOM-USD",
+                "HBAR-USD",
+                "BCH-USD",
+                "DOT-USD",
+                "UNI-USD",
+                "AAVE-USD",
+                "SCRT-USD",
+                "ALGO-USD",
                 "VET-USD",
-                # "XTZ-USD",
-                # # Meme coins (availability may vary on Yahoo Finance):
-                # "DOGE-USD",
-                # "PEPE-USD",
-                # "SHIB-USD",
-                # "BONK-USD",
-                # "WIF-USD",
-                # "FLOKI-USD",
+                "XTZ-USD",
+                # Meme coins (availability may vary on Yahoo Finance):
+                "DOGE-USD",
+                "PEPE-USD",
+                "SHIB-USD",
+                "BONK-USD",
+                "WIF-USD",
+                "FLOKI-USD",
             ],
             interval=tf,
             start="2010-01-01",
             end="2030-12-31",
             create_info_file=True,
+            mode="futures",
         )

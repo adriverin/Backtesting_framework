@@ -7,11 +7,14 @@ from .base_strategy import BaseStrategy
 from .moving_average_strategy import MovingAverageStrategy
 from .ml_rsi_ema_volume_strategy import MLRSIEMAVolumeStrategy
 from .ml_strategy import MLStrategy
+from .donchian_strategy import DonchianStrategy
 
 # Dictionary for convenience to fetch by name
 aVAILABLE_STRATEGIES = {
     "ma": MovingAverageStrategy,
     "ml_rsi_ema_volume": MLRSIEMAVolumeStrategy,
     "ml": MLStrategy,
+    "don": DonchianStrategy,
+    "donchian": DonchianStrategy,
 }
 
