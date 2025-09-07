@@ -79,6 +79,27 @@
 
 	<script>
 	const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+	let hasAutoSelectedTf = false;
+
+	// Normalize ISO strings: treat missing timezone as UTC (append 'Z')
+	function normalizeIsoToUtc(str) {
+		if (!str) return null;
+		const s = String(str).trim();
+		if (s.endsWith('Z') || s.includes('+')) return s;
+		const t = s.includes('T') ? s : s.replace(' ', 'T');
+		return t + 'Z';
+	}
+
+	function toDateUtc(iso) {
+		const n = normalizeIsoToUtc(iso);
+		return n ? new Date(n) : null;
+	}
+
+	function toZurichYmd(date) {
+		if (!(date instanceof Date)) return null;
+		const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Zurich', year: 'numeric', month: '2-digit', day: '2-digit' });
+		return fmt.format(date); // YYYY-MM-DD
+	}
 
 	async function fetchNDJSON(path) {
 		try {
@@ -125,7 +146,7 @@
 			const side = (ev.order?.side || '').toUpperCase();
 			const qty = ev.order?.quantity ?? ev.order?.quote_quantity ?? '?';
 			const price = ev.order?.price ?? '-';
-			const time = ev.timestamp ? new Date(ev.timestamp).toLocaleString() : '';
+			const time = ev.timestamp ? toDateUtc(ev.timestamp).toLocaleString('en-GB', { timeZone: 'Europe/Zurich' }) : '';
 			const row = document.createElement('div');
 			row.className = 'row';
 			row.innerHTML = `
@@ -141,7 +162,7 @@
 
 	function renderCandlesAndTrades(bars, trades, symbol, tf) {
 		const b = bars.filter(x => x.symbol === symbol && x.timeframe === tf).map(x => x.bar);
-		const x = b.map(v => new Date(v.timestamp));
+		const x = b.map(v => toDateUtc(v.timestamp));
 		const open = b.map(v => v.open);
 		const high = b.map(v => v.high);
 		const low = b.map(v => v.low);
@@ -150,8 +171,8 @@
 		const t = trades.filter(e => e.symbol === symbol && (e.order?.status === 'FILLED'));
 		const buys = t.filter(e => (e.order?.side || '').toUpperCase() === 'BUY');
 		const sells = t.filter(e => (e.order?.side || '').toUpperCase() === 'SELL');
-		const buyTrace = { x: buys.map(e => new Date(e.timestamp)), y: buys.map(e => e.order?.price ?? null), mode: 'markers', name: 'Buys', marker: { color: '#4ade80', size: 8, symbol: 'triangle-up' } };
-		const sellTrace = { x: sells.map(e => new Date(e.timestamp)), y: sells.map(e => e.order?.price ?? null), mode: 'markers', name: 'Sells', marker: { color: '#f87171', size: 8, symbol: 'triangle-down' } };
+		const buyTrace = { x: buys.map(e => toDateUtc(e.timestamp)), y: buys.map(e => e.order?.price ?? null), mode: 'markers', name: 'Buys', marker: { color: '#4ade80', size: 8, symbol: 'triangle-up' } };
+		const sellTrace = { x: sells.map(e => toDateUtc(e.timestamp)), y: sells.map(e => e.order?.price ?? null), mode: 'markers', name: 'Sells', marker: { color: '#f87171', size: 8, symbol: 'triangle-down' } };
 		const layout = { uirevision: 'candles', paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', margin: { l: 40, r: 20, t: 10, b: 40 }, xaxis: { color: '#9aa3b2' }, yaxis: { color: '#9aa3b2' } };
 		Plotly.react('candles', [trace, buyTrace, sellTrace], layout);
 	}
@@ -161,7 +182,7 @@
 		for (const a of acct) {
 			const eq = a?.account?.equity_quote;
 			if (eq == null) continue;
-			xs.push(new Date(a.timestamp));
+			xs.push(toDateUtc(a.timestamp));
 			ys.push(Number(eq));
 		}
 		if (xs.length === 0) { Plotly.purge('equity_quote'); return; }
@@ -184,22 +205,35 @@
 
 	async function refresh() {
 		const sym = document.getElementById('symbol').value.trim();
-		const tf = document.getElementById('tf').value;
+		let tf = document.getElementById('tf').value;
 		const from = document.getElementById('from').value;
 		const to = document.getElementById('to').value;
 		const allDates = dateRangeStrings(from, to, 30);
-		// Probe only bar files to avoid 404s on trades/account
+
+		// Fetch runs first to auto-select timeframe from the latest session for this symbol (once)
+		const runPathsAll = allDates.map(d => `logs/run_${d}.ndjson`);
+		const runsAll = await fetchMany(runPathsAll);
+		try {
+			const latestRunForSym = runsAll
+				.filter(r => (r.config?.symbol || '').toUpperCase() === sym.toUpperCase())
+				.sort((a,b) => (a.timestamp || '').localeCompare(b.timestamp || ''))
+				.pop();
+			if (latestRunForSym && !hasAutoSelectedTf) {
+				const newTf = latestRunForSym.config?.timeframe;
+				if (newTf && typeof newTf === 'string') {
+					document.getElementById('tf').value = newTf;
+					tf = newTf;
+					hasAutoSelectedTf = true;
+				}
+			}
+		} catch {}
+
+		// Probe only bar files (with possibly updated tf) to avoid 404s on trades/account
 		const existenceChecks = await Promise.all(allDates.map(async d => {
 			const hasBars = await fetchHead(`logs/bars_${sym}_${tf}_${d}.ndjson`);
 			return { d, ok: hasBars };
 		}));
 		const dates = existenceChecks.filter(x => x.ok).map(x => x.d);
-		if (dates.length === 0) {
-			// Nothing found; fall back to today only to avoid repeated 404s
-			const today = new Date();
-			const y = today.getFullYear(), m = String(today.getMonth()+1).padStart(2,'0'), day = String(today.getDate()).padStart(2,'0');
-			dates.push(`${y}-${m}-${day}`);
-		}
 		const tradePaths = dates.map(d => `logs/trades_${d}.ndjson`);
 		const acctPaths = dates.map(d => `logs/account_${d}.ndjson`);
 		const barPaths = dates.map(d => `logs/bars_${sym}_${tf}_${d}.ndjson`);
@@ -207,20 +241,43 @@
 		const [trades, bars, acct, runs] = await Promise.all([ fetchMany(tradePaths), fetchMany(barPaths), fetchMany(acctPaths), fetchMany(runPaths) ]);
 		// Update session badge with mode if available
 		try {
-			const latestRun = runs
+			// Prefer the latest run WITH config across all dates to avoid falling back to 'spot'
+			let latestRun = runsAll
 				.filter(r => (r.config?.symbol || '').toUpperCase() === sym.toUpperCase() && (r.config?.timeframe || '') === tf)
 				.sort((a,b) => (a.timestamp || '').localeCompare(b.timestamp || ''))
 				.pop();
-			if (latestRun) {
-				const mode = (latestRun.config?.instrument_mode || 'spot').toUpperCase();
+			// Fallback to the subset from selected dates if nothing found
+			if (!latestRun) {
+				latestRun = runs
+					.filter(r => (r.config?.symbol || '').toUpperCase() === sym.toUpperCase() && (r.config?.timeframe || '') === tf)
+					.sort((a,b) => (a.timestamp || '').localeCompare(b.timestamp || ''))
+					.pop();
+			}
+			if (latestRun && latestRun.config) {
+				const mode = (latestRun.config.instrument_mode || 'spot').toUpperCase();
 				document.getElementById('session_info').textContent = `${sym} ${tf} [${mode}]`;
 			}
 		} catch {}
-		renderFeed(trades, sym);
-		renderCandlesAndTrades(bars, trades, sym, tf);
-		renderEquityFromAccount(acct);
+		// Filter events to the Zurich-local day range
+		const ymdFrom = (allDates.length ? allDates[0] : from) || null;
+		const ymdTo = (allDates.length ? allDates[allDates.length - 1] : to) || null;
+		function withinYmd(dateObj) {
+			if (!(dateObj instanceof Date)) return false;
+			const ymd = toZurichYmd(dateObj);
+			if (ymdFrom && ymd < ymdFrom) return false;
+			if (ymdTo && ymd > ymdTo) return false;
+			return true;
+		}
+
+		const tradesF = trades.filter(e => withinYmd(toDateUtc(e.timestamp)));
+		const barsF = bars.filter(x => withinYmd(toDateUtc(x?.bar?.timestamp)));
+		const acctF = acct.filter(a => withinYmd(toDateUtc(a.timestamp)));
+
+		renderFeed(tradesF, sym);
+		renderCandlesAndTrades(barsF, tradesF, sym, tf);
+		renderEquityFromAccount(acctF);
 		// Compute and populate KPIs
-		const m = computeMetrics(trades, bars, sym, 10000);
+		const m = computeMetrics(tradesF, barsF, sym, 10000);
 		document.getElementById('k_trades').textContent = String(m.n ?? '-');
 		document.getElementById('k_win').textContent = (m.pWin == null ? '-' : (m.pWin*100).toFixed(1) + '%');
 		document.getElementById('k_gross').textContent = (m.gross ?? 0).toFixed(2);

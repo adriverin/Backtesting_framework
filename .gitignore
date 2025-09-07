@@ -2,6 +2,7 @@ data/**/*.parquet
 data/**/*.json
 data/**/*.txt
 data/*.parquet
+data/orderbook_depth/*
 
 *.parquet
 

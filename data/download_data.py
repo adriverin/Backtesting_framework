@@ -171,7 +171,8 @@ def create_maximum_cache_for_assets(
         "assets": {},
     }
 
-    cache_dir = Path("data/futures") if _mode == "futures" else Path("data/spot")
+    # cache_dir = Path("data/futures") if _mode == "futures" else Path("data/spot")
+    cache_dir = Path("futures") if _mode == "futures" else Path("spot")
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     rule_str, expected_delta = _interval_to_pandas_rule(interval)
@@ -377,40 +378,40 @@ def create_maximum_cache_for_assets(
 
 if __name__ == "__main__":
     # time_intervals = ["1m", "5m", "15m", "4h", "1d"]
-    time_intervals = ["5m", "15m", "1h", "4h", "1d"]
-    # time_intervals = ["5m","15m"]
+    # time_intervals = ["5m", "15m", "1h", "4h", "1d"]
+    time_intervals = ["1m", "5m"]
 
     for tf in time_intervals:
         print(f"Getting max cached for {tf}")
         create_maximum_cache_for_assets(
             assets=[
-                "BTC-USD",
-                "ETH-USD",
-                "SOL-USD",
-                "ADA-USD",
-                "AVAX-USD",
-                "BNB-USD",
-                "XRP-USD",
-                "LTC-USD",
-                "LINK-USD",
-                "XLM-USD",
-                "ATOM-USD",
-                "HBAR-USD",
-                "BCH-USD",
-                "DOT-USD",
-                "UNI-USD",
-                "AAVE-USD",
-                "SCRT-USD",
-                "ALGO-USD",
-                "VET-USD",
-                "XTZ-USD",
-                # Meme coins (availability may vary on Yahoo Finance):
-                "DOGE-USD",
-                "PEPE-USD",
-                "SHIB-USD",
-                "BONK-USD",
-                "WIF-USD",
-                "FLOKI-USD",
+                 "BTC-USD",
+                # "ETH-USD",
+                # "SOL-USD",
+                # "ADA-USD",
+                # "AVAX-USD",
+                # "BNB-USD",
+                # "XRP-USD",
+                # "LTC-USD",
+                # "LINK-USD",
+                # "XLM-USD",
+                # "ATOM-USD",
+                # "HBAR-USD",
+                # "BCH-USD",
+                # "DOT-USD",
+                # "UNI-USD",
+                # "AAVE-USD",
+                # "SCRT-USD",
+                # "ALGO-USD",
+                #"VET-USD",
+                # "XTZ-USD",
+                # # Meme coins (availability may vary on Yahoo Finance):
+                # "DOGE-USD",
+                # "PEPE-USD",
+                # "SHIB-USD",
+                # "BONK-USD",
+                # "WIF-USD",
+                # "FLOKI-USD",
             ],
             interval=tf,
             start="2010-01-01",

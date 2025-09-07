@@ -9,7 +9,15 @@ from pathlib import Path
 import pandas as pd
 
 # Reuse helpers to match schema/filenames
-from download_data import _normalize_symbol_for_binance, _normalize_symbol_for_filename, _interval_to_pandas_rule
+# Support execution both as a module and as a script
+try:
+	from data.download_data import _normalize_symbol_for_binance, _normalize_symbol_for_filename, _interval_to_pandas_rule  # type: ignore
+except Exception:
+	try:
+		from download_data import _normalize_symbol_for_binance, _normalize_symbol_for_filename, _interval_to_pandas_rule  # type: ignore
+	except Exception:  # pragma: no cover
+		# As a last resort (e.g., when used inside a package context)
+		from .download_data import _normalize_symbol_for_binance, _normalize_symbol_for_filename, _interval_to_pandas_rule  # type: ignore
 
 
 def _ensure_datetime_index(df: pd.DataFrame) -> pd.DataFrame:

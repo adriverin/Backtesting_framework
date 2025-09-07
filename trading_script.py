@@ -49,19 +49,37 @@ class TradeConfig:
 	fee_bps: Optional[float] = None  # override per-side fee in bps; if None, use mode default
 
 
-def load_latest_ohlcv(asset: str, timeframe: str) -> pd.DataFrame:
-	"""Load local OHLCV parquet prepared by backtests."""
+def load_latest_ohlcv(symbol: str, timeframe: str) -> pd.DataFrame:
+	"""Load local OHLCV parquet prepared by backtests or live feeder.
+
+	Tries common symbol filename variants (USD/USDT).
+	"""
 	mode_env = os.environ.get("INSTRUMENT_MODE", "spot").strip().lower()
-	base_dir = "data/futures" if mode_env == "futures" else "data/spot"
-	path = f"{base_dir}/ohlcv_{asset}_{timeframe}.parquet"
-	if not os.path.exists(path):
-		raise FileNotFoundError(path)
-	df = pd.read_parquet(path)
-	if not isinstance(df.index, pd.DatetimeIndex):
-		df.index = pd.to_datetime(df.index, errors="coerce")
-	if getattr(df.index, "tz", None) is not None:
-		df.index = df.index.tz_convert("UTC").tz_localize(None)
-	return df
+	primary_base = "data/futures" if mode_env == "futures" else "data/spot"
+	alt_base = "data/spot" if primary_base.endswith("futures") else "data/futures"
+
+	# Normalize incoming symbol to filename token and try variants
+	s = symbol.upper().replace("/", "").replace("-", "")
+	candidates = [s]
+	if s.endswith("USDT"):
+		candidates.append(s[:-4] + "USD")
+	elif s.endswith("USD"):
+		candidates.append(s[:-3] + "USDT")
+
+	tried: list[str] = []
+	for base_dir in (primary_base, alt_base):
+		for tok in dict.fromkeys(candidates):  # preserve order, de-dup
+			path = f"{base_dir}/ohlcv_{tok}_{timeframe}.parquet"
+			tried.append(path)
+			if os.path.exists(path):
+				df = pd.read_parquet(path)
+				if not isinstance(df.index, pd.DatetimeIndex):
+					df.index = pd.to_datetime(df.index, errors="coerce")
+				if getattr(df.index, "tz", None) is not None:
+					df.index = df.index.tz_convert("UTC").tz_localize(None)
+				return df
+
+	raise FileNotFoundError(f"No OHLCV parquet found. Tried: {tried}")
 
 
 def timeframe_to_bars_per_day(tf: str) -> int:
@@ -109,14 +127,14 @@ def main() -> None:
 		position_sizing_mode="fixed_fraction",
 		position_sizing_params={"fraction": float(os.environ.get("SIZE_FRACTION", "0.1"))},
 		paper=True,
-		poll_seconds=int(os.environ.get("POLL_SECONDS", "60")),
+		poll_seconds=int(os.environ.get("POLL_SECONDS", "30")),
 		logs_dir="logs",
 		vwap_window=params.get("vwap_window", 10),
 		market_quote_usdt=float(os.environ.get("TEST_ORDER_QUOTE", "1000")),
 		start_equity=float(os.environ.get("START_EQUITY", "10000")),
 		max_position_notional=float(os.environ.get("MAX_POSITION_NOTIONAL", "0") or 0) or None,
 		daily_loss_limit_quote=float(os.environ.get("DAILY_LOSS_LIMIT", "0") or 0) or None,
-		wf_lookback_years=float(os.environ.get("WF_LOOKBACK_YEARS", "2.0")),
+		wf_lookback_years=float(os.environ.get("WF_LOOKBACK_YEARS", "1.0")),
 		wf_step_days=int(os.environ.get("WF_STEP_DAYS", "7")),
 		sim_loop=(os.environ.get("SIM_LOOP", "0") == "1"),
 		base_qty=float(os.environ.get("BASE_QTY", "40000")),
@@ -140,8 +158,9 @@ def main() -> None:
 			"fee_bps_used": (cfg.fee_bps if cfg.fee_bps is not None else (4.0 if cfg.instrument_mode == "futures" else 10.0)),
 		},
 	)
+	print(f"[RUN_START] id={run_id} symbol={cfg.symbol} tf={cfg.timeframe} mode={cfg.instrument_mode.upper()} paper={cfg.paper} poll={cfg.poll_seconds}s")
 
-	asset = cfg.symbol.replace("USDT", "USD") if cfg.symbol.endswith("USDT") else cfg.symbol
+	asset_symbol = cfg.symbol
 
 	# Summary accumulators
 	gross_pnl = 0.0
@@ -190,7 +209,7 @@ def main() -> None:
 
 		while True:
 			# Reload data periodically to pick new bars if present
-			df = load_latest_ohlcv(asset, cfg.timeframe)
+			df = load_latest_ohlcv(asset_symbol, cfg.timeframe)
 
 			# Initialize i to start at the most recent bar once we have enough history
 			if i < lookback_bars:
@@ -215,11 +234,12 @@ def main() -> None:
 			if last_bar_ts_str != bar_ts:
 				logger.log_bar_snapshot(cfg.symbol, cfg.timeframe, bar)
 				last_bar_ts_str = bar_ts
+				print(f"[{cfg.symbol} {cfg.timeframe}] bar={bar_ts} price={price:.8f} pos_qty={position_qty}")
 
 			# Additionally log a dashboard timeframe bar if configured
 			if cfg.dashboard_tf:
 				try:
-					df_dash = load_latest_ohlcv(asset, cfg.dashboard_tf)
+					df_dash = load_latest_ohlcv(asset_symbol, cfg.dashboard_tf)
 					if len(df_dash):
 						dash_ts = df_dash.index[-1].isoformat()
 						if dashboard_last_bar_ts_str != dash_ts:
@@ -234,6 +254,7 @@ def main() -> None:
 			current_equity = cfg.start_equity + gross_pnl - fees_quote
 			if cfg.daily_loss_limit_quote is not None and (current_equity - cfg.start_equity) <= -abs(cfg.daily_loss_limit_quote):
 				logger.log_error(severity="WARNING", source="RISK", message="Daily loss limit reached. Pausing trades.")
+				print(f"[RISK] Daily loss limit reached. Equity={current_equity:.2f} start={cfg.start_equity:.2f} limit={cfg.daily_loss_limit_quote:.2f}")
 				i += 1
 				time.sleep(cfg.poll_seconds)
 				continue
@@ -252,6 +273,10 @@ def main() -> None:
 				model_strategy = strategy_cls(price_column=cfg.price_column, **cfg.ml_params)
 				model_strategy.optimize(train_df)
 				retrain_due_index = i + step_bars
+				try:
+					print(f"[RETRAIN] idx={i} lookback_bars={effective_lb} window=({train_df.index.min().isoformat()} -> {train_df.index.max().isoformat()}) next_due={retrain_due_index}")
+				except Exception:
+					print(f"[RETRAIN] idx={i} lookback_bars={effective_lb} next_due={retrain_due_index}")
 
 			# Generate current signal using fitted model on calc_df
 			signals = model_strategy.generate_signals(calc_df)
@@ -261,6 +286,13 @@ def main() -> None:
 				"timestamp": bar_ts,
 				"value": current_signal,
 			})
+			try:
+				_prev_side = (prev_signal is not None) and (float(prev_signal) > 0)
+				_cur_side = (current_signal > 0)
+				if prev_signal is None or (_prev_side != _cur_side):
+					print(f"[SIGNAL] {bar_ts} value={current_signal:.4f} side={'LONG' if _cur_side else 'FLAT'} (prev={'LONG' if _prev_side else 'FLAT' if prev_signal is not None else 'NA'})")
+			except Exception:
+				pass
 
 			# Per-bar target application: apply each bar's desired position once
 			target_long = current_signal > 0
@@ -355,6 +387,7 @@ def main() -> None:
 					"position_side": "LONG",
 				}
 				logger.log_trade_event("BINANCE", cfg.symbol, cfg.base_asset, cfg.quote_asset, order, execution, pnl=pnl_payload, latency_ms=latency_ms, run_id=run_id)
+				print(f"[TRADE] BUY qty={order['quantity']} avg_price={order['price']:.8f} quote={order['quote_quantity']:.2f} fees_total={fees_quote:.4f}")
 
 			elif (last_applied_bar_ts != bar_ts) and (not target_long) and position_qty > 0.0:
 				close_qty = position_qty
@@ -444,6 +477,7 @@ def main() -> None:
 					"position_side": None,
 				}
 				logger.log_trade_event("BINANCE", cfg.symbol, cfg.base_asset, cfg.quote_asset, order, execution, pnl=pnl_payload, latency_ms=latency_ms, run_id=run_id)
+				print(f"[TRADE] SELL qty={order['quantity']} avg_price={order['price']:.8f} realized={realized:.4f} fees_total={fees_quote:.4f}")
 
 			# Update equity / dd
 			unrealized = 0.0
@@ -464,7 +498,7 @@ def main() -> None:
 					"cash_quote": None,
 					"unrealized_pnl_quote": unrealized,
 					"positions": [
-						{"symbol": cfg.symbol, "qty": position_qty, "entry_price": position_entry_price or price, "mark_price": price, "unrealized_pnl_quote": unrealized, "side": ("LONG" if position_qty >= 0 else "SHORT")}
+						{"symbol": cfg.symbol, "qty": position_qty, "entry_price": position_entry_price or price, "mark_price": price, "unrealized_pnl_quote": unrealized, "side": (None if position_qty == 0 else ("LONG" if position_qty > 0 else "SHORT"))}
 					],
 					"balances": [],
 				}
@@ -479,6 +513,7 @@ def main() -> None:
 					except Exception as ex:
 						logger.log_error(severity="WARNING", source="API", message="Account fetch failed", context={"error": str(ex)})
 				logger.log_account_snapshot(exchange="BINANCE", account=account, run_id=run_id)
+				print(f"[ACCOUNT] equity={current_equity:.2f} unrealized={unrealized:.4f} pos_qty={position_qty} mark={price:.8f}")
 
 			# Mark this bar as processed (even if no position change) to avoid reapplying on restart
 			last_applied_bar_ts = bar_ts
@@ -514,6 +549,11 @@ def main() -> None:
 				"max_drawdown_quote": max_drawdown_quote,
 			},
 		)
+		try:
+			_wr = (win_rate * 100.0) if win_rate is not None else None
+			print(f"[RUN_END] trades={trades_count} win_rate={('NA' if _wr is None else f'{_wr:.1f}%')} gross={gross_pnl:.4f} fees={fees_quote:.4f} net={(gross_pnl - fees_quote):.4f} maxDD={max_drawdown_quote:.4f}")
+		except Exception:
+			print("[RUN_END] summary written")
 
 
 if __name__ == "__main__":

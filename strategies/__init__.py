@@ -8,6 +8,7 @@ from .moving_average_strategy import MovingAverageStrategy
 from .ml_rsi_ema_volume_strategy import MLRSIEMAVolumeStrategy
 from .ml_strategy import MLStrategy
 from .donchian_strategy import DonchianStrategy
+from .orderbook_depth_strategy import OrderBookDepthStrategy
 
 # Dictionary for convenience to fetch by name
 aVAILABLE_STRATEGIES = {
@@ -16,5 +17,6 @@ aVAILABLE_STRATEGIES = {
     "ml": MLStrategy,
     "don": DonchianStrategy,
     "donchian": DonchianStrategy,
+    "orderbook_depth": OrderBookDepthStrategy,
 }
 

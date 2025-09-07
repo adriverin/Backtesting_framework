@@ -88,5 +88,5 @@ def load_asset_cache_info(interval: str = "1h", mode: str = "spot") -> dict:
 
 if __name__ == "__main__":
     # Show both spot and futures by default when run directly
-    load_asset_cache_info("4h", mode="futures")
+    load_asset_cache_info("5m", mode="futures")
     

@@ -687,8 +687,8 @@ ml_params_geminipro25 = { # pvalue 0.62, N=50
 ml_params = {
     # "interval": "1h",
     # "forecast_horizon_hours": 1,
-    "interval": "5m",
-    "forecast_horizon_hours": 1,    
+    "interval": "4h",
+    "forecast_horizon_hours": 4,    
     "n_epochs": 200,
     "hidden_sizes": (64, 32, 16),
     "signal_percentiles": (10, 90),
@@ -721,18 +721,29 @@ ml_params = {
 if __name__ == "__main__":
     # main()
 
+    orderbook_depth_params = {
+        "symbol": "BTCUSDT",
+        "percentage": 1,
+        "lb_mean_min": 1000,
+        "lb_mean_max": 1000,
+        "lb_cur_min": 5,
+        "lb_cur_max": 15,
+        "z_threshold": 3,
+        "persistence": 30,
+    }
     plot_cumulative_returns(
-        start_date="2020-02-14",
+        start_date="2024-01-01",
         end_date="2024-10-31",
         # strategy_name="ma",
-        strategy_name="ml",
-        asset="VETUSD",
-        timeframe="4h",
+        strategy_name="orderbook_depth",
+        asset="BTCUSD",
+        timeframe="1m",
         show_plot=False,
-        strategy_kwargs=ml_params,
-        price_column="vwap_20",
+        # strategy_kwargs=ml_params,
+        strategy_kwargs=orderbook_depth_params,
+        price_column="close",#"vwap_20",
         fee_bps=10.0,
-        slippage_bps=10.0,
+        slippage_bps=5.0,
         save_json_dir="reports/example_run",
         position_sizing_mode="fixed_fraction",
         position_sizing_params={
