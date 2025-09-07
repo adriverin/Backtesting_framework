@@ -4,6 +4,8 @@ data/**/*.txt
 data/*.parquet
 data/orderbook_depth/*
 
+reports/*
+
 *.parquet
 
 
