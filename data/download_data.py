@@ -385,7 +385,7 @@ if __name__ == "__main__":
         print(f"Getting max cached for {tf}")
         create_maximum_cache_for_assets(
             assets=[
-                 "BTC-USD",
+                # "BTC-USD",
                 # "ETH-USD",
                 # "SOL-USD",
                 # "ADA-USD",
@@ -403,7 +403,7 @@ if __name__ == "__main__":
                 # "AAVE-USD",
                 # "SCRT-USD",
                 # "ALGO-USD",
-                #"VET-USD",
+                "VET-USD",
                 # "XTZ-USD",
                 # # Meme coins (availability may vary on Yahoo Finance):
                 # "DOGE-USD",

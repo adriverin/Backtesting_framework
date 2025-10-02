@@ -343,6 +343,12 @@ def plot_cumulative_returns(
     # print(f"$100,000 strategy (gross) would be   ${strat_end_value_gross:,.2f}")
     print(f"$100,000 strategy (net) would be     ${strat_end_value_net:,.2f}")
     print("-" * 80)
+    print(f"Number of trades: {num_trades}")
+    print(f"Win rate (net): {win_rate_net_pct:.2f}%")
+    print(f"Avg win (net): {avg_win_net_pct:.2f}%")
+    print(f"Avg loss (net): {avg_loss_net_pct:.2f}%")
+    print(f"Expectancy (net): {expectancy_tharp_net_pct:.2f}%")
+    print("-")
     print(f"Gross  Profit Factor : {pf_gross:.4f}")
     print(f"Gross  Sharpe (log)  : {sharpe_gross:.4f}")
     # print(f"Gross  % Log Return  : {pct_return_log_gross:.2f}%")
@@ -360,6 +366,8 @@ def plot_cumulative_returns(
     # print(f"Asset  % Log Return  : {pct_return_asset_log:.2f}%")
     print(f"Asset  % Simple Ret  : {pct_return_asset_simple:.2f}%")
     print("=" * 80)
+    print("")
+    print("")
 
     # ------------------------------------------------------------------ #
     # Plot                                                               #
@@ -722,32 +730,33 @@ if __name__ == "__main__":
     # main()
 
     orderbook_depth_params = {
-        "symbol": "BTCUSDT",
-        "percentage": 1,
+        "symbol": "VETUSDT",
+        "percentage": 1, # percentage to use for the orderbook depth
         "lb_mean_min": 1000,
         "lb_mean_max": 1000,
-        "lb_cur_min": 5,
-        "lb_cur_max": 15,
-        "z_threshold": 3,
-        "persistence": 30,
+        "lb_cur_min": 1,
+        "lb_cur_max": 1,
+        "z_threshold": 2.0, # to buy/sell
+        "exit_band": -0.5, # z value to exit position
+        "persistence": 1,
     }
     plot_cumulative_returns(
         start_date="2024-01-01",
         end_date="2024-10-31",
         # strategy_name="ma",
         strategy_name="orderbook_depth",
-        asset="BTCUSD",
+        asset="VETUSD",
         timeframe="1m",
         show_plot=False,
         # strategy_kwargs=ml_params,
         strategy_kwargs=orderbook_depth_params,
-        price_column="close",#"vwap_20",
+        price_column="vwap_20",
         fee_bps=10.0,
         slippage_bps=5.0,
         save_json_dir="reports/example_run",
         position_sizing_mode="fixed_fraction",
         position_sizing_params={
-            "fraction": 0.1,
+            "fraction": 0.15,
         },
         mode="futures",
         # position_sizing_mode="fixed_notional",

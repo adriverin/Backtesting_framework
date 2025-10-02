@@ -87,6 +87,7 @@ def orderbook_depth_strategy(
     lookback_current: int = 10,
     z_threshold: float = 2.0,
     persistence: int = 1,
+    exit_band: float | None = None,
     shift_signal: bool = True,
     eps: float = 1e-9,
 ) -> pd.Series:
@@ -110,11 +111,14 @@ def orderbook_depth_strategy(
 
     ratio = aligned["bid"] / (aligned["ask"] + aligned["bid"] + eps)
 
-    r_ma = ratio.rolling(window=lookback_mean, min_periods=lookback_mean).mean()
-    r_std = ratio.rolling(window=lookback_mean, min_periods=lookback_mean).std()
-    r_current = ratio.rolling(window=lookback_current, min_periods=lookback_current).mean()
+    r_ma = ratio.rolling("120D").mean()
+    r_std = ratio.rolling("120D").std()
+    r_current = ratio.rolling("1min").mean()
+    # r_ma = ratio.rolling(window=lookback_mean, min_periods=lookback_mean).mean()
+    # r_std = ratio.rolling(window=lookback_mean, min_periods=lookback_mean).std()
+    # r_current = ratio.rolling(window=lookback_current, min_periods=lookback_current).mean()    
 
-    z_score = (r_current - r_ma) / (r_std + eps)
+    z_score = -(r_current - r_ma) / (r_std + eps)
 
     raw = pd.Series(
         np.where(z_score > z_threshold, 1, np.where(z_score < -z_threshold, -1, 0)),
@@ -129,7 +133,31 @@ def orderbook_depth_strategy(
         filt[neg_run == persistence] = -1
         raw = filt
 
-    signal = raw.replace(0, np.nan).ffill().fillna(0)
+    # Exit-band logic:
+    #  - if exit_band > 0: symmetric neutral zone, go flat when |z| < exit_band
+    #  - if exit_band < 0: directional hysteresis; exit longs when z <= |exit_band|, exit shorts when z >= -|exit_band|
+    if exit_band is not None and float(exit_band) > 0:
+        intermediate = raw.copy()
+        abs_z = z_score.abs()
+        # Forward-fill positions only when we are outside the exit band
+        # i.e., in neutral region but still outside exit band -> keep holding; inside band -> go flat (0)
+        mask_ffill = (intermediate == 0) & (abs_z >= float(exit_band))
+        intermediate[mask_ffill] = np.nan
+        signal = intermediate.ffill().fillna(0)
+    elif exit_band is not None and float(exit_band) < 0:
+        band = abs(float(exit_band))
+        intermediate = raw.copy()
+        # Determine prior non-zero direction to apply opposite-side exit threshold
+        prev_pos = raw.replace(0, np.nan).ffill().fillna(0)
+        # For longs: hold while z > -band (exit when z <= -band)
+        hold_long_mask = (intermediate == 0) & (prev_pos == 1) & (z_score > -band)
+        # For shorts: hold while z < +band (exit when z >= +band)
+        hold_short_mask = (intermediate == 0) & (prev_pos == -1) & (z_score < band)
+        mask_ffill = hold_long_mask | hold_short_mask
+        intermediate[mask_ffill] = np.nan
+        signal = intermediate.ffill().fillna(0)
+    else:
+        signal = raw.replace(0, np.nan).ffill().fillna(0)
     if shift_signal:
         signal = signal.shift(1)
     return signal
@@ -154,6 +182,7 @@ def optimize_orderbook_depth_strategy(
     lb_cur_max: int = 60,
     z_threshold: float = 2.0,
     persistence: int = 1,
+    exit_band: float | None = None,
 ) -> Tuple[Tuple[int, int], float]:
     """Grid-search lookbacks to maximise Profit Factor.
 
@@ -168,9 +197,9 @@ def optimize_orderbook_depth_strategy(
     best_pf = 0.0
     best_params = (0, 0)
 
-    for lb_mean in range(max(2, lb_mean_min), max(2, lb_mean_max) + 1):
+    for lb_mean in range(max(2, lb_mean_min), max(2, lb_mean_max) + 1, 100):
         lb_cur_hi = min(lb_cur_max, lb_mean - 1) if lb_mean > 1 else lb_cur_min
-        for lb_cur in range(max(1, lb_cur_min), max(1, lb_cur_hi) + 1):
+        for lb_cur in range(max(1, lb_cur_min), max(1, lb_cur_hi) + 1, 10):
             signal = orderbook_depth_strategy(
                 orderbook_depth,
                 percentage=percentage,
@@ -178,6 +207,7 @@ def optimize_orderbook_depth_strategy(
                 lookback_current=lb_cur,
                 z_threshold=z_threshold,
                 persistence=persistence,
+                exit_band=exit_band,
                 shift_signal=True,
             )
             if signal.empty:
@@ -211,6 +241,7 @@ class OrderBookDepthStrategy(BaseStrategy):
         lb_cur_max: int = 60,
         z_threshold: float = 2.0,
         persistence: int = 1,
+        exit_band: float | None = None,
         base_dir: str = "data/orderbook_depth",
         use_parquet_day_cache: bool = True,
         **kwargs: Any,
@@ -224,6 +255,7 @@ class OrderBookDepthStrategy(BaseStrategy):
         self.lb_cur_max = int(lb_cur_max)
         self.z_threshold = float(z_threshold)
         self.persistence = int(persistence)
+        self.exit_band = exit_band if exit_band is None else float(exit_band)
         self.base_dir = base_dir
         self.use_parquet_day_cache = bool(use_parquet_day_cache)
 
@@ -268,6 +300,7 @@ class OrderBookDepthStrategy(BaseStrategy):
             lb_cur_max=self.lb_cur_max,
             z_threshold=self.z_threshold,
             persistence=self.persistence,
+            exit_band=self.exit_band,
         )
         self.best_params = params
         self.best_pf = best_pf
@@ -286,6 +319,7 @@ class OrderBookDepthStrategy(BaseStrategy):
             lookback_current=lb_cur,
             z_threshold=self.z_threshold,
             persistence=self.persistence,
+            exit_band=self.exit_band,
             shift_signal=True,
         )
         # Align to OHLC index
