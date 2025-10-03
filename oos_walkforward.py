@@ -155,7 +155,6 @@ class WalkForward:
         self.train_step = train_step
         self.price_column = price_column
         self.generate_plot = generate_plot
-        self.strategy_kwargs = strategy_kwargs or {}
         self.fee_bps = fee_bps
         self.slippage_bps = slippage_bps
         self.position_sizing_mode = position_sizing_mode
@@ -167,6 +166,18 @@ class WalkForward:
             raise ValueError(
                 f"Unknown strategy '{strategy_name}'. Available: {list(aVAILABLE_STRATEGIES)}"
             )
+        
+        # Pass fee_bps and slippage_bps to strategy if it supports them (e.g., for optimization)
+        effective_fee_bps = float(self.fee_bps) if self.fee_bps and self.fee_bps > 0 else (4.0 if self.mode == "futures" else 10.0)
+        effective_slippage_bps = float(self.slippage_bps)
+        
+        # Merge fees into strategy_kwargs if strategy supports them
+        self.strategy_kwargs = strategy_kwargs or {}
+        if "fee_bps" not in self.strategy_kwargs:
+            self.strategy_kwargs["fee_bps"] = effective_fee_bps
+        if "slippage_bps" not in self.strategy_kwargs:
+            self.strategy_kwargs["slippage_bps"] = effective_slippage_bps
+        
         self.strategy_cls: Type[BaseStrategy] = aVAILABLE_STRATEGIES[strategy_name]
 
 
@@ -650,7 +661,7 @@ if __name__ == "__main__":
     # }
 
     from is_results import ml_params
-
+    from is_results import orderbook_depth_params
     # Derive sensible walk-forward window sizes in BARS for the chosen timeframe
     _tf = "4h"
     if _tf.endswith("m"):

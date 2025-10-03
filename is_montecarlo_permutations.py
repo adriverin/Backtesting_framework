@@ -220,8 +220,19 @@ class InSampleMCTester:
                 f"Unknown strategy '{strategy_name}'. Available: {list(aVAILABLE_STRATEGIES)}"
             )
 
+        # Pass fee_bps and slippage_bps to strategy if it supports them (e.g., for optimization)
+        effective_fee_bps = float(self.fee_bps) if self.fee_bps and self.fee_bps > 0 else (4.0 if self.mode == "futures" else 10.0)
+        effective_slippage_bps = float(self.slippage_bps)
+        
+        # Merge fees into strategy_kwargs if strategy supports them
+        final_strategy_kwargs = {**self.strategy_kwargs}
+        if "fee_bps" not in final_strategy_kwargs:
+            final_strategy_kwargs["fee_bps"] = effective_fee_bps
+        if "slippage_bps" not in final_strategy_kwargs:
+            final_strategy_kwargs["slippage_bps"] = effective_slippage_bps
+
         strategy_cls: Type[BaseStrategy] = aVAILABLE_STRATEGIES[strategy_name]
-        self.strategy: BaseStrategy = strategy_cls(price_column=price_column, **self.strategy_kwargs)
+        self.strategy: BaseStrategy = strategy_cls(price_column=price_column, **final_strategy_kwargs)
 
     # ------------------------------------------------------------------ #
     # Data helpers                                                       #
@@ -474,26 +485,26 @@ if __name__ == "__main__":
 
 
     from is_results import ml_params, ml_params_geminipro25, ml_params_deepseekR1, ml_params_kimiK2, ml_params_claudesonnet4
-
+    from is_results import orderbook_depth_params
 
     tester = InSampleMCTester(
-        start_date="2020-02-14",
-        end_date="2024-10-31",
-        strategy_name="donchian",
+        start_date="2024-01-01",
+        end_date="2024-12-31",
+        strategy_name="orderbook_depth",
         asset="VETUSD",
-        timeframe="1h",
-        n_perm=20,
-        generate_plot=True,
-        # strategy_kwargs=ml_params,
+        timeframe="1m",
+        n_perm=100,
+        generate_plot=False,
+        strategy_kwargs=orderbook_depth_params,
         # strategy_kwargs=ml_params_conservative,
         # strategy_kwargs=ml_params_mc_safe,
         # strategy_kwargs=ml_params,
-        price_column="vwap_10",
+        price_column="vwap_30",
         fee_bps=10.0,
-        slippage_bps=10.0,
+        slippage_bps=5.0,
         position_sizing_mode="fixed_fraction",
         position_sizing_params={
-            "fraction": 0.1,
+            "fraction": 1,
         },        
         mode="futures",
     )

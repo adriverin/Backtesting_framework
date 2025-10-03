@@ -174,6 +174,9 @@ def plot_cumulative_returns(
     mode: str = "spot",
 ):
     strategy_kwargs = strategy_kwargs or {}
+    
+    # Normalize mode early as it's used throughout
+    _mode = (mode or "spot").strip().lower()
 
     if strategy_name not in aVAILABLE_STRATEGIES:
         raise ValueError(
@@ -183,7 +186,7 @@ def plot_cumulative_returns(
     # ------------------------------------------------------------------ #
     # Load data                                                          #
     # ------------------------------------------------------------------ #
-    base_dir = Path("data/futures") if (mode or "spot").strip().lower() == "futures" else Path("data/spot")
+    base_dir = Path("data/futures") if _mode == "futures" else Path("data/spot")
     filepath = base_dir / f"ohlcv_{asset}_{timeframe}.parquet"
     if not filepath.exists():
         raise FileNotFoundError(filepath)
@@ -205,7 +208,25 @@ def plot_cumulative_returns(
     # Run strategy                                                       #
     # ------------------------------------------------------------------ #
     strategy_cls: Type[BaseStrategy] = aVAILABLE_STRATEGIES[strategy_name]
-    strategy = strategy_cls(price_column=price_column, **strategy_kwargs)
+    
+    # Pass fee_bps and slippage_bps to strategy if it supports them (e.g., for optimization)
+    # Compute effective fees using same logic as below
+    if fee_bps and fee_bps > 0:
+        effective_fee_bps = float(fee_bps)
+    else:
+        # Sensible defaults per mode if not provided: Spot≈10bps, Futures≈4bps
+        effective_fee_bps = 4.0 if _mode == "futures" else 10.0
+    effective_slippage_bps = float(slippage_bps)
+    
+    # Merge fees into strategy_kwargs if strategy supports them
+    final_strategy_kwargs = {**strategy_kwargs}
+    # Only add if not already present (respect user override)
+    if "fee_bps" not in final_strategy_kwargs:
+        final_strategy_kwargs["fee_bps"] = effective_fee_bps
+    if "slippage_bps" not in final_strategy_kwargs:
+        final_strategy_kwargs["slippage_bps"] = effective_slippage_bps
+    
+    strategy = strategy_cls(price_column=price_column, **final_strategy_kwargs)
     strategy.optimize(df)  # optimise on same slice for simplicity
     signals = strategy.generate_signals(df)
 
@@ -231,13 +252,7 @@ def plot_cumulative_returns(
     df["strategy_simple_r"] = df["simple_r"] * df["weight"]
 
     # Fees/slippage model (per-side bps applied on position changes)
-    _mode = (mode or "spot").strip().lower()
-    if fee_bps and fee_bps > 0:
-        effective_fee_bps = float(fee_bps)
-    else:
-        # Sensible defaults per mode if not provided: Spot≈10bps, Futures≈4bps
-        effective_fee_bps = 4.0 if _mode == "futures" else 10.0
-    effective_slippage_bps = float(slippage_bps)
+    # Note: effective_fee_bps and effective_slippage_bps already computed above
     fee_rate = (effective_fee_bps + effective_slippage_bps) / 10000.0
     turnover = (df["weight"].diff().abs()).fillna(df["weight"].abs())
     df["turnover"] = turnover
@@ -338,10 +353,10 @@ def plot_cumulative_returns(
     # Ending equity values from cumulative simple returns (avoid mixing % with decimals)
     # asset_end_value = 100000.0 * float((1.0 + asset_cum_simple.iloc[-1]))
     # strat_end_value_gross = 100000.0 * float((1.0 + strat_cum_simple_gross.iloc[-1]))
-    strat_end_value_net = 100000.0 * float((1.0 + strat_cum_simple_net.iloc[-1]))
+    strat_end_value_net = 1000.0 * float((1.0 + strat_cum_simple_net.iloc[-1]))
     # print(f"$100,000 invested in asset would be ${asset_end_value:,.2f}")
     # print(f"$100,000 strategy (gross) would be   ${strat_end_value_gross:,.2f}")
-    print(f"$100,000 strategy (net) would be     ${strat_end_value_net:,.2f}")
+    print(f"$1,000 strategy (net) would be     ${strat_end_value_net:,.2f}")
     print("-" * 80)
     print(f"Number of trades: {num_trades}")
     print(f"Win rate (net): {win_rate_net_pct:.2f}%")
@@ -726,23 +741,44 @@ ml_params = {
 
 
 
+
+# # To optimize: around 28000 datapoins per day
+# data_points_per_day = 28500
+# data_points_per_1h = data_points_per_day / 24
+# data_points_per_4h = data_points_per_1h * 4
+# data_points_per_1m = data_points_per_1h / 60
+
+
+# lb_mean_min = 30 * data_points_per_day
+# lb_mean_max = 360 * data_points_per_day
+# lb_cur_min = 1 * data_points_per_1m
+# lb_cur_max = 60 * data_points_per_1m
+
+orderbook_depth_params = {
+    "symbol": "VETUSDT",
+    "percentage": 2, # percentage to use for the orderbook depth
+    # percentage 2 seems to be the best for at least one case of VETUSDT using z_threshold=3 and exit_band=-3
+    "lb_mean_min": 190,  # Search from 180 days
+    "lb_mean_max": 230,  # to 240 days (step: 30 days)
+    "lb_cur_min": 1,     # Search from 1 minute  
+    "lb_cur_max": 1,     # to 5 minutes (step: 1 minute)
+    # NOTE: Time-based optimization is now enabled by default
+    # This will search: 180D, 210D, 240D x 1min, 2min, 3min, 4min, 5min = 15 combinations
+    # To use fixed lookbacks instead (skip optimization):
+    # "lookback_mean": "210D",
+    # "lookback_current": "1min",
+    "z_threshold": 1.5, # to buy/sell
+    "exit_band": -1.5, # z value to exit position
+    "persistence": 1,
+}
+
 if __name__ == "__main__":
     # main()
 
-    orderbook_depth_params = {
-        "symbol": "VETUSDT",
-        "percentage": 1, # percentage to use for the orderbook depth
-        "lb_mean_min": 1000,
-        "lb_mean_max": 1000,
-        "lb_cur_min": 1,
-        "lb_cur_max": 1,
-        "z_threshold": 2.0, # to buy/sell
-        "exit_band": -0.5, # z value to exit position
-        "persistence": 1,
-    }
+
     plot_cumulative_returns(
         start_date="2024-01-01",
-        end_date="2024-10-31",
+        end_date="2024-12-31",
         # strategy_name="ma",
         strategy_name="orderbook_depth",
         asset="VETUSD",
@@ -750,13 +786,13 @@ if __name__ == "__main__":
         show_plot=False,
         # strategy_kwargs=ml_params,
         strategy_kwargs=orderbook_depth_params,
-        price_column="vwap_20",
+        price_column="vwap_30",
         fee_bps=10.0,
         slippage_bps=5.0,
         save_json_dir="reports/example_run",
         position_sizing_mode="fixed_fraction",
         position_sizing_params={
-            "fraction": 0.15,
+            "fraction": 1.0,
         },
         mode="futures",
         # position_sizing_mode="fixed_notional",
