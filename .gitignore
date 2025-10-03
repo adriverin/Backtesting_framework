@@ -23,3 +23,4 @@ reports/dashboard_*
 reports/*.png
 prompt_papertrading.txt
 logs/*
+reports/example_run/oos_wf.json
