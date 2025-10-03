@@ -25,3 +25,4 @@ prompt_papertrading.txt
 logs/*
 reports/example_run/oos_wf.json
 reports/example_run/oos_wf.json
+reports/example_run/ins_mc.json
