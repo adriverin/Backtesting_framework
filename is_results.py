@@ -787,7 +787,7 @@ if __name__ == "__main__":
         # strategy_kwargs=ml_params,
         strategy_kwargs=orderbook_depth_params,
         price_column="vwap_30",
-        fee_bps=10.0,
+        fee_bps=4.0, #for futures is lower than 10.0,
         slippage_bps=5.0,
         save_json_dir="reports/example_run",
         position_sizing_mode="fixed_fraction",

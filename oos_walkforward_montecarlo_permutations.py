@@ -639,10 +639,10 @@ if __name__ == "__main__":
     #     generate_plot=True,
     # )
 
-    from is_results import ml_params
-
+    #from is_results import ml_params
+    from is_results import orderbook_depth_params
     # Derive sensible walk-forward window sizes in BARS for the chosen timeframe
-    _tf = "4h"
+    _tf = "1m"
     if _tf.endswith("m"):
         _bar_hours = int(_tf[:-1]) / 60.0
     elif _tf.endswith("h"):
@@ -653,7 +653,7 @@ if __name__ == "__main__":
         _bar_hours = 1.0
     _bars_per_day = max(1, int(round(24.0 / _bar_hours)))
 
-    _years_lb = 4
+    _years_lb = 1
     _days_step = 30
     _lookback_bars = int(365 * _years_lb * _bars_per_day)   # e.g., 4 years of context
     _step_bars = int(_days_step * _bars_per_day)            # e.g., 30 days per step
@@ -664,21 +664,21 @@ if __name__ == "__main__":
 
     tester = WalkForwardMCTester(
         start_date="2025-01-01",
-        end_date="2025-08-01",
-        strategy_name="ml",
+        end_date="2025-09-30",
+        strategy_name="orderbook_depth",
         asset="VETUSD",
         timeframe=_tf,
         train_lookback=_lookback_bars,
         train_step=_step_bars,
         generate_plot=True,
-        strategy_kwargs=ml_params,
-        price_column="vwap_10",
+        strategy_kwargs=orderbook_depth_params,
+        price_column="vwap_30",
         n_perm=20,
-        fee_bps=10.0,
-        slippage_bps=10.0,
+        fee_bps=4.0, #for futures is lower than 10.0,
+        slippage_bps=5.0,
         position_sizing_mode="fixed_fraction",
         position_sizing_params={
-            "fraction": 0.1,
+            "fraction": 1,
         },        
     )    
     tester.run(save_json_dir="reports/example_run")

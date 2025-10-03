@@ -5,6 +5,7 @@ data/*.parquet
 data/orderbook_depth/*
 
 reports/*
+reports/example_run/*
 
 *.parquet
 
