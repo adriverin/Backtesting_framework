@@ -1,0 +1,80 @@
+{
+  "symbol": "VETUSD",
+  "mode": "futures",
+  "timeframe": "1m",
+  "price_column": "vwap_30",
+  
+  "strategy": {
+    "name": "orderbook_depth",
+    "params": {
+      "percentage": 2,
+      "lookback_mean": "210D",
+      "lookback_current": "1min",
+      "z_threshold": 1.5,
+      "exit_band": -1.5,
+      "persistence": 1
+    }
+  },
+  
+  "binance": {
+    "api_key": "",
+    "api_secret": "",
+    "testnet": false
+  },
+  
+  "position_sizing": {
+    "mode": "fixed_fraction",
+    "params": {
+      "fraction": 1.0
+    }
+  },
+  
+  "fees": {
+    "fee_bps": 4.0,
+    "slippage_bps": 5.0
+  },
+  
+  "data": {
+    "orderbook_depth_levels": 5,
+    "orderbook_update_interval_ms": 100,
+    "price_update_interval_sec": 30,
+    "data_dir": "data"
+  },
+  
+  "reoptimization": {
+    "enabled": true,
+    "interval_hours": 24,
+    "lookback_days": 365,
+    "min_data_points": 10000
+  },
+  
+  "risk": {
+    "max_position_size": 1.0,
+    "stop_loss_pct": null,
+    "take_profit_pct": null
+  },
+  
+  "telegram": {
+    "enabled": false,
+    "bot_token": "",
+    "chat_id": ""
+  },
+  
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8000
+  },
+  
+  "logging": {
+    "level": "INFO",
+    "dir": "logs/live_trading",
+    "format": "json"
+  },
+  
+  "runtime": {
+    "auto_restart": true,
+    "max_restart_attempts": 10,
+    "restart_delay_sec": 60
+  }
+}
+

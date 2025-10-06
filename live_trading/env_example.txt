@@ -1,0 +1,39 @@
+# Binance API Configuration
+BINANCE_API_KEY=your_api_key_here
+BINANCE_API_SECRET=your_api_secret_here
+BINANCE_TESTNET=false
+
+# Trading Configuration
+TRADING_SYMBOL=VETUSD
+TRADING_MODE=futures
+TRADING_TIMEFRAME=1m
+PRICE_COLUMN=vwap_30
+
+# Strategy Parameters (Order Book Depth)
+OB_PERCENTAGE=2
+OB_LOOKBACK_MEAN=210D
+OB_LOOKBACK_CURRENT=1min
+OB_Z_THRESHOLD=1.5
+OB_EXIT_BAND=-1.5
+OB_PERSISTENCE=1
+
+# Position Sizing
+POSITION_MODE=fixed_fraction
+POSITION_FRACTION=1.0
+
+# Fees
+FEE_BPS=4.0
+SLIPPAGE_BPS=5.0
+
+# Telegram Notifications
+TELEGRAM_ENABLED=false
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+TELEGRAM_CHAT_ID=your_telegram_chat_id
+
+# Server
+SERVER_HOST=0.0.0.0
+SERVER_PORT=8000
+
+# Logging
+LOG_LEVEL=INFO
+

@@ -1,0 +1,21 @@
+# Live Trading System Dependencies
+
+# Core trading
+ccxt>=4.0.0
+websockets>=12.0
+
+# Web server
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+aiohttp>=3.9.0
+
+# Data processing (from main requirements)
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Telegram (optional)
+python-telegram-bot>=20.0
+
+# Charting (for dashboard)
+# Note: Chart.js is loaded via CDN in dashboard.html
+
