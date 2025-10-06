@@ -26,3 +26,6 @@ logs/*
 reports/example_run/oos_wf.json
 reports/example_run/oos_wf.json
 reports/example_run/ins_mc.json
+
+
+strategies_to_check.md
