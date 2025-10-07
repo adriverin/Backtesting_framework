@@ -46,6 +46,9 @@ class PriceFeeder:
         self.last_df: pd.DataFrame | None = None
         self.last_load_time: float = 0
         self.cache_duration_sec = 5  # Reload every 5 seconds
+        
+        # Map interval to expected bar duration
+        self._bar_delta = self._get_bar_timedelta(self.interval)
     
     def get_latest_data(self, lookback_bars: Optional[int] = None) -> pd.DataFrame:
         """Get latest price data from parquet file.
@@ -156,8 +159,15 @@ class PriceFeeder:
                 print(f"[PriceFeeder] Attempt {attempt}: File exists, trying to load data...")
                 df = self.get_latest_data()
                 if not df.empty:
-                    print(f"[PriceFeeder] Success! Loaded {len(df)} bars, latest: {df.index[-1]}")
-                    return True
+                    latest_ts = df.index[-1]
+                    now_ts = datetime.now(timezone.utc).replace(tzinfo=None)
+                    lag = (now_ts - latest_ts) if latest_ts <= now_ts else pd.Timedelta(seconds=0)
+                    # Consider caught up if the latest bar is within one expected bar duration of now
+                    if lag <= self._bar_delta:
+                        print(f"[PriceFeeder] Success! Loaded {len(df)} bars, latest: {latest_ts} (lag {lag})")
+                        return True
+                    else:
+                        print(f"[PriceFeeder] Attempt {attempt}: Data lag {lag} > bar interval {self._bar_delta}; waiting...")
                 else:
                     print(f"[PriceFeeder] Attempt {attempt}: File exists but data is empty")
             else:
@@ -167,4 +177,16 @@ class PriceFeeder:
         
         print(f"[PriceFeeder] Timeout after {timeout_sec}s")
         return False
+
+    def _get_bar_timedelta(self, interval: str) -> pd.Timedelta:
+        """Return expected timedelta for a bar interval string like '1m', '5m', '1h', etc."""
+        iv = interval.strip().lower()
+        if iv.endswith('m'):
+            return pd.Timedelta(minutes=int(iv[:-1] or 1))
+        if iv.endswith('h'):
+            return pd.Timedelta(hours=int(iv[:-1] or 1))
+        if iv.endswith('d'):
+            return pd.Timedelta(days=int(iv[:-1] or 1))
+        # Default to 1 minute if unrecognized
+        return pd.Timedelta(minutes=1)
 
