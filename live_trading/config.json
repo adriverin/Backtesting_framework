@@ -17,8 +17,8 @@
   },
   
   "binance": {
-    "api_key": "",
-    "api_secret": "",
+    "api_key": "asdf",
+    "api_secret": "asdf",
     "testnet": false
   },
   
