@@ -179,13 +179,16 @@ class LiveTradingSystem:
             if te and te.performance_tracker:
                 pt = te.performance_tracker
                 metrics = pt.get_metrics()
+                trades_df = pt.get_trades_df()
                 start_cap = pt.initial_capital
                 final_equity = te.current_capital + te.unrealized_pnl
-                num_trades = int(metrics.get('num_trades', 0))
+                # Report round-trips (closed trades) to avoid counting open+close as two
+                num_trades = int(len(trades_df[trades_df['action'] == 'close'])) if not trades_df.empty else int(metrics.get('num_trades', 0))
                 win_rate = float(metrics.get('win_rate', 0.0))
                 avg_win = float(metrics.get('avg_win', 0.0))
                 avg_loss = float(metrics.get('avg_loss', 0.0))
-                cum_return_pct = float(metrics.get('total_return_pct', 0.0))
+                # Compute return from final vs starting equity to avoid staleness
+                cum_return_pct = ((final_equity - start_cap) / start_cap) * 100 if start_cap > 0 else 0.0
 
                 msg = (
                     "🛑 *Live Trading System Stopped*\n\n"

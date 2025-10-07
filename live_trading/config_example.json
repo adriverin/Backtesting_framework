@@ -1,5 +1,5 @@
 {
-  "symbol": "VETUSD",
+  "symbol": "VETUSDT",
   "mode": "futures",
   "timeframe": "1m",
   "price_column": "vwap_30",

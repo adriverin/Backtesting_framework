@@ -59,6 +59,9 @@ class TradingEngine:
         
         # Binance client (for order execution)
         self.exchange = None
+        # Telegram notifier (injected by run_live)
+        # Optional attribute; present when Telegram is configured
+        # self.telegram_notifier will be set externally
     
     async def initialize(self) -> None:
         """Initialize all components."""
@@ -348,6 +351,20 @@ class TradingEngine:
                 quantity=executed_qty,
                 signal=self.current_signal,
             )
+
+            # Telegram alert for trade open
+            try:
+                notifier = getattr(self, 'telegram_notifier', None)
+                if notifier:
+                    await notifier.send_trade_alert(
+                        action='open',
+                        direction='long' if direction > 0 else 'short',
+                        price=executed_price,
+                        quantity=executed_qty,
+                        symbol=self.config['symbol'],
+                    )
+            except Exception as _e:
+                pass
             
             print(f"[TradingEngine] Opened {'LONG' if direction > 0 else 'SHORT'} position: "
                   f"{executed_qty:.6f} @ {executed_price:.6f}")
@@ -419,6 +436,22 @@ class TradingEngine:
                 pnl=pnl,
                 pnl_pct=pnl_pct,
             )
+
+            # Telegram alert for trade close
+            try:
+                notifier = getattr(self, 'telegram_notifier', None)
+                if notifier:
+                    await notifier.send_trade_alert(
+                        action='close',
+                        direction='long' if self.current_position > 0 else 'short',
+                        price=executed_price,
+                        quantity=self.position_size,
+                        symbol=self.config['symbol'],
+                        pnl=pnl,
+                        pnl_pct=pnl_pct,
+                    )
+            except Exception as _e:
+                pass
             
             print(f"[TradingEngine] Closed {'LONG' if self.current_position > 0 else 'SHORT'} position: "
                   f"P&L = ${pnl:.2f} ({pnl_pct:.2f}%)")
