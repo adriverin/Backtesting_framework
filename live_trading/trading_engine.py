@@ -5,6 +5,7 @@ import asyncio
 import time
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -62,6 +63,12 @@ class TradingEngine:
         # Telegram notifier (injected by run_live)
         # Optional attribute; present when Telegram is configured
         # self.telegram_notifier will be set externally
+
+        # Persisted state
+        log_dir = Path(self.config.get('logging.dir', 'logs'))
+        log_dir.mkdir(parents=True, exist_ok=True)
+        self.state_path = log_dir / f"state_{self.config['symbol']}_{self.config['timeframe']}.json"
+        self.prev_signal: float = 0.0
     
     async def initialize(self) -> None:
         """Initialize all components."""
@@ -96,6 +103,9 @@ class TradingEngine:
         
         # Initialize strategy
         await self._init_strategy()
+        
+        # Load persisted state
+        self._load_state()
         
         print("[TradingEngine] Initialization complete!")
     
@@ -232,6 +242,9 @@ class TradingEngine:
             # Get latest signal
             latest_signal = float(signals.iloc[-1])
             self.current_signal = latest_signal
+            # Save as previous for next comparison and persist state
+            self.prev_signal = latest_signal
+            self._save_state()
             
             print(f"[TradingEngine] Signal updated: {latest_signal} (position: {self.current_position})")
         
@@ -275,7 +288,8 @@ class TradingEngine:
             return  # No change needed
         
         # Determine action
-        if self.current_position == 0 and self.current_signal != 0:
+        # Only open on signal change to avoid duplicate re-opens after restart
+        if self.current_position == 0 and self.current_signal != 0 and self.current_signal != self.prev_signal:
             # Open new position
             await self._open_position(self.current_signal)
         elif self.current_position != 0 and self.current_signal == 0:
@@ -365,6 +379,9 @@ class TradingEngine:
                     )
             except Exception as _e:
                 pass
+
+            # Persist state after opening
+            self._save_state()
             
             print(f"[TradingEngine] Opened {'LONG' if direction > 0 else 'SHORT'} position: "
                   f"{executed_qty:.6f} @ {executed_price:.6f}")
@@ -460,6 +477,7 @@ class TradingEngine:
             self.current_position = 0.0
             self.entry_price = None
             self.position_size = 0.0
+            self._save_state()
         
         except Exception as e:
             print(f"[TradingEngine] Error closing position: {e}")
@@ -510,6 +528,40 @@ class TradingEngine:
             await self.exchange.close()
         
         print("[TradingEngine] Stopped")
+
+    def _load_state(self) -> None:
+        try:
+            if self.state_path.exists():
+                with open(self.state_path, 'r') as f:
+                    st = json.load(f)
+                self.current_position = float(st.get('current_position', 0.0))
+                self.current_signal = float(st.get('last_signal', 0.0))
+                self.prev_signal = float(st.get('last_signal', 0.0))
+                self.entry_price = st.get('entry_price', None)
+                if self.entry_price is not None:
+                    self.entry_price = float(self.entry_price)
+                self.position_size = float(st.get('position_size', 0.0))
+                # Keep current_capital as-is unless present
+                if 'current_capital' in st:
+                    self.current_capital = float(st['current_capital'])
+                print(f"[TradingEngine] State loaded from {self.state_path}")
+        except Exception as e:
+            print(f"[TradingEngine] Failed to load state: {e}")
+
+    def _save_state(self) -> None:
+        try:
+            st = {
+                'current_position': self.current_position,
+                'last_signal': self.current_signal,
+                'entry_price': self.entry_price,
+                'position_size': self.position_size,
+                'current_capital': self.current_capital,
+                'timestamp': datetime.now(timezone.utc).isoformat(),
+            }
+            with open(self.state_path, 'w') as f:
+                json.dump(st, f)
+        except Exception:
+            pass
     
     def get_state(self) -> Dict[str, Any]:
         """Get current engine state."""
