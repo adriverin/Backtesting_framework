@@ -173,11 +173,44 @@ class LiveTradingSystem:
         # Stop all components
         await self._stop_components()
         
-        # Send shutdown notification
-        await self.telegram_notifier.send_message(
-            f"🛑 *Live Trading System Stopped*\n\n"
-            f"Final Equity: ${self.trading_engine.current_capital + self.trading_engine.unrealized_pnl:.2f}"
-        )
+        # Send shutdown notification with performance summary
+        try:
+            te = self.trading_engine
+            if te and te.performance_tracker:
+                pt = te.performance_tracker
+                metrics = pt.get_metrics()
+                start_cap = pt.initial_capital
+                final_equity = te.current_capital + te.unrealized_pnl
+                num_trades = int(metrics.get('num_trades', 0))
+                win_rate = float(metrics.get('win_rate', 0.0))
+                avg_win = float(metrics.get('avg_win', 0.0))
+                avg_loss = float(metrics.get('avg_loss', 0.0))
+                cum_return_pct = float(metrics.get('total_return_pct', 0.0))
+
+                msg = (
+                    "🛑 *Live Trading System Stopped*\n\n"
+                    f"Starting Balance: `${start_cap:.2f}` USDT\n"
+                    f"Final Equity: `${final_equity:.2f}` USDT\n"
+                    f"Cumulative Simple Return: `{cum_return_pct:.2f}%`\n"
+                    f"Number of Trades: `{num_trades}`\n"
+                    f"Win Rate: `{win_rate:.1f}%`\n"
+                    f"Average Win: `${avg_win:.2f}`\n"
+                    f"Average Loss: `${avg_loss:.2f}`"
+                )
+            else:
+                final_equity = self.trading_engine.current_capital + self.trading_engine.unrealized_pnl if self.trading_engine else 0.0
+                msg = (
+                    "🛑 *Live Trading System Stopped*\n\n"
+                    f"Final Equity: `${final_equity:.2f}` USDT"
+                )
+            await self.telegram_notifier.send_message(msg)
+        except Exception as _e:
+            # Fallback minimal message if anything goes wrong building summary
+            final_equity = self.trading_engine.current_capital + self.trading_engine.unrealized_pnl if self.trading_engine else 0.0
+            await self.telegram_notifier.send_message(
+                "🛑 *Live Trading System Stopped*\n\n"
+                f"Final Equity: `${final_equity:.2f}` USDT"
+            )
         
         print("✅ Shutdown complete")
         print("=" * 80)
