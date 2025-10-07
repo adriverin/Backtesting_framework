@@ -10,8 +10,8 @@
       "percentage": 2,
       "lookback_mean": "210D",
       "lookback_current": "1min",
-      "z_threshold": 1.5,
-      "exit_band": -1.5,
+      "z_threshold": 1.0,
+      "exit_band": -1.0,
       "persistence": 1
     }
   },
