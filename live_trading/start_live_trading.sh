@@ -12,7 +12,7 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║  Live Trading System - Startup Script ║${NC}"
+echo -e "${BLUE}║  Live Trading System - Startup Script  ║${NC}"
 echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
 echo ""
 
@@ -28,9 +28,10 @@ PRICE_FEEDER_PID=$(pgrep -f "live_feeder_ccxt.py.*${SYMBOL}.*${INTERVAL}" || tru
 if [ -n "$PRICE_FEEDER_PID" ]; then
     echo -e "${GREEN}✓${NC} Price feeder already running (PID: ${PRICE_FEEDER_PID})"
 else
-    # Start price feeder in background
+    # Start price feeder in background (must run from project root)
     echo -e "${BLUE}▶${NC} Starting price feeder for ${SYMBOL} ${INTERVAL} (${MODE})..."
-    cd ..
+    PROJECT_ROOT="$(cd .. && pwd)"
+    cd "${PROJECT_ROOT}"
     nohup python data/live_feeder_ccxt.py \
         --symbol "${SYMBOL}" \
         --interval "${INTERVAL}" \
@@ -45,12 +46,13 @@ else
     # Wait for initial data
     echo -e "${BLUE}⏳${NC} Waiting for initial price data (30s)..."
     sleep 30
+    
+    cd "${PROJECT_ROOT}/live_trading"
 fi
 
 # Start live trading system
 echo ""
 echo -e "${BLUE}▶${NC} Starting live trading system..."
-cd live_trading
 
 # Load environment variables if .env exists
 if [ -f .env ]; then

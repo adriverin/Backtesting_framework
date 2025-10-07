@@ -12,7 +12,17 @@ class TradingConfig:
     
     def __init__(self, config_path: str | None = None):
         """Initialize config from file or environment variables."""
-        self.config_path = config_path or os.getenv("LIVE_TRADING_CONFIG", "live_trading/config.json")
+        # Resolve config path robustly: prefer provided path, then env, else file-relative default
+        default_config_path = (Path(__file__).parent / "config.json").resolve()
+        env_path = os.getenv("LIVE_TRADING_CONFIG")
+        if config_path:
+            cp = Path(config_path)
+            self.config_path = str(cp if cp.is_absolute() else (Path(__file__).parent / cp).resolve())
+        elif env_path:
+            ep = Path(env_path)
+            self.config_path = str(ep if ep.is_absolute() else (Path(__file__).parent / ep).resolve())
+        else:
+            self.config_path = str(default_config_path)
         self.config: Dict[str, Any] = self._load_config()
     
     def _load_config(self) -> Dict[str, Any]:
@@ -64,6 +74,7 @@ class TradingConfig:
                 "orderbook_update_interval_ms": 100,  # WebSocket update frequency
                 "price_update_interval_sec": 30,  # Price data polling interval
                 "data_dir": "data",
+                "orderbook_depth_dir": "data/orderbook_depth",  # Directory for orderbook depth data
             },
             
             # Re-optimization
@@ -110,14 +121,44 @@ class TradingConfig:
         }
         
         # Try to load from file if exists
-        if Path(self.config_path).exists():
+        config_file_path = Path(self.config_path)
+        if config_file_path.exists():
             try:
-                with open(self.config_path, 'r') as f:
+                with open(config_file_path, 'r') as f:
                     file_config = json.load(f)
                     # Deep merge file config with defaults
                     self._deep_merge(default_config, file_config)
             except Exception as e:
                 print(f"Warning: Failed to load config from {self.config_path}: {e}")
+        
+        # Resolve relative paths to absolute paths
+        # Paths in config are relative to the config file's directory
+        config_dir = config_file_path.parent if config_file_path.exists() else Path(__file__).parent.resolve()
+        
+        # Resolve data_dir if it's relative
+        if 'data' in default_config and 'data_dir' in default_config['data']:
+            data_dir = default_config['data']['data_dir']
+            data_path = Path(data_dir)
+            if not data_path.is_absolute():
+                # Resolve relative to config directory
+                resolved_path = (config_dir / data_path).resolve()
+                default_config['data']['data_dir'] = str(resolved_path)
+        
+        # Resolve orderbook_depth_dir if it's relative
+        if 'data' in default_config and 'orderbook_depth_dir' in default_config['data']:
+            ob_dir = default_config['data']['orderbook_depth_dir']
+            ob_path = Path(ob_dir)
+            if not ob_path.is_absolute():
+                resolved_path = (config_dir / ob_path).resolve()
+                default_config['data']['orderbook_depth_dir'] = str(resolved_path)
+        
+        # Resolve logging dir if it's relative
+        if 'logging' in default_config and 'dir' in default_config['logging']:
+            log_dir = default_config['logging']['dir']
+            log_path = Path(log_dir)
+            if not log_path.is_absolute():
+                resolved_path = (config_dir / log_path).resolve()
+                default_config['logging']['dir'] = str(resolved_path)
         
         return default_config
     

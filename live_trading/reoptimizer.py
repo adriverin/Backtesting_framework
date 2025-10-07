@@ -174,6 +174,7 @@ class StrategyReoptimizer:
             start_date = price_data.index.min()
             end_date = price_data.index.max()
             
+            ob_base = self.config.get('data.orderbook_depth_dir', 'data/orderbook_depth')
             orderbook_data = read_data(
                 symbol=symbol,
                 start_year=start_date.year,
@@ -182,7 +183,7 @@ class StrategyReoptimizer:
                 end_year=end_date.year,
                 end_month=end_date.month,
                 end_day=end_date.day,
-                base_dir='data/orderbook_depth',
+                base_dir=ob_base,
                 use_parquet_day_cache=True,
             )
             

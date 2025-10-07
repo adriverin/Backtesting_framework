@@ -38,7 +38,8 @@
     "orderbook_depth_levels": 5,
     "orderbook_update_interval_ms": 100,
     "price_update_interval_sec": 30,
-    "data_dir": "data"
+    "data_dir": "../data",
+    "orderbook_depth_dir": "../data/orderbook_depth"
   },
   
   "reoptimization": {
@@ -67,7 +68,7 @@
   
   "logging": {
     "level": "INFO",
-    "dir": "logs/live_trading",
+    "dir": "../logs/live_trading",
     "format": "json"
   },
   

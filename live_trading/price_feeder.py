@@ -37,7 +37,9 @@ class PriceFeeder:
         self.mode = mode.lower()
         
         # Determine parquet file path
-        base_dir = Path(data_dir) / ("futures" if self.mode == "futures" else "spot")
+        # data_dir should already be absolute from config resolution
+        data_path = Path(data_dir)
+        base_dir = data_path / ("futures" if self.mode == "futures" else "spot")
         self.parquet_path = base_dir / f"ohlcv_{symbol}_{interval}.parquet"
         
         # Cache
@@ -98,7 +100,9 @@ class PriceFeeder:
                 self.last_load_time = current_time
             
             except Exception as e:
-                print(f"[PriceFeeder] Error loading data: {e}")
+                print(f"[PriceFeeder] Error loading data from {self.parquet_path}: {e}")
+                import traceback
+                traceback.print_exc()
                 return pd.DataFrame()
         
         # Apply lookback
@@ -140,14 +144,27 @@ class PriceFeeder:
             True if data is available, False if timeout
         """
         start_time = time.time()
+        attempt = 0
+        
+        print(f"[PriceFeeder] Waiting for data at: {self.parquet_path.resolve()}")
         
         while (time.time() - start_time) < timeout_sec:
-            if self.parquet_path.exists():
+            attempt += 1
+            exists = self.parquet_path.exists()
+            
+            if exists:
+                print(f"[PriceFeeder] Attempt {attempt}: File exists, trying to load data...")
                 df = self.get_latest_data()
                 if not df.empty:
+                    print(f"[PriceFeeder] Success! Loaded {len(df)} bars, latest: {df.index[-1]}")
                     return True
+                else:
+                    print(f"[PriceFeeder] Attempt {attempt}: File exists but data is empty")
+            else:
+                print(f"[PriceFeeder] Attempt {attempt}: File does not exist yet")
             
             await asyncio.sleep(5)
         
+        print(f"[PriceFeeder] Timeout after {timeout_sec}s")
         return False
 

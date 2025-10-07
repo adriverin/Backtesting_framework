@@ -151,7 +151,7 @@ class TradingEngine:
         # Special handling for orderbook depth strategy
         if strategy_name == 'orderbook_depth':
             strategy_params['symbol'] = self.config['symbol']
-            strategy_params['base_dir'] = 'data/orderbook_depth'
+            strategy_params['base_dir'] = self.config.get('data.orderbook_depth_dir', 'data/orderbook_depth')
         
         self.strategy = strategy_cls(price_column=price_column, **strategy_params)
         self.strategy_params = strategy_params
@@ -245,7 +245,8 @@ class TradingEngine:
         try:
             # Save to CSV in expected format
             symbol = self.config['symbol']
-            base_dir = Path('data/orderbook_depth') / symbol
+            ob_base = self.config.get('data.orderbook_depth_dir', 'data/orderbook_depth')
+            base_dir = Path(ob_base) / symbol
             base_dir.mkdir(parents=True, exist_ok=True)
             
             # Get current date
