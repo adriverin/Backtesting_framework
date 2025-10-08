@@ -75,7 +75,8 @@
   "runtime": {
     "auto_restart": true,
     "max_restart_attempts": 10,
-    "restart_delay_sec": 60
+    "restart_delay_sec": 60,
+    "start_fresh": false
   }
 }
 
