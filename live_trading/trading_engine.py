@@ -104,8 +104,15 @@ class TradingEngine:
         # Initialize strategy
         await self._init_strategy()
         
-        # Load persisted state
-        self._load_state()
+        # Load or reset persisted state based on config/env
+        import os
+        start_fresh_cfg = bool(self.config.get('runtime.start_fresh', False))
+        start_fresh_env = str(os.getenv('START_FRESH', '')).lower() in ('1','true','yes','y')
+        if start_fresh_cfg or start_fresh_env:
+            print("[TradingEngine] Starting fresh: resetting persisted state")
+            self._reset_state()
+        else:
+            self._load_state()
         
         print("[TradingEngine] Initialization complete!")
     
@@ -242,9 +249,6 @@ class TradingEngine:
             # Get latest signal
             latest_signal = float(signals.iloc[-1])
             self.current_signal = latest_signal
-            # Save as previous for next comparison and persist state
-            self.prev_signal = latest_signal
-            self._save_state()
             
             print(f"[TradingEngine] Signal updated: {latest_signal} (position: {self.current_position})")
         
@@ -381,6 +385,7 @@ class TradingEngine:
                 pass
 
             # Persist state after opening
+            self.prev_signal = self.current_signal
             self._save_state()
             
             print(f"[TradingEngine] Opened {'LONG' if direction > 0 else 'SHORT'} position: "
@@ -477,6 +482,8 @@ class TradingEngine:
             self.current_position = 0.0
             self.entry_price = None
             self.position_size = 0.0
+            # Allow re-entry on next non-zero signal
+            self.prev_signal = 0.0
             self._save_state()
         
         except Exception as e:
@@ -562,6 +569,20 @@ class TradingEngine:
                 json.dump(st, f)
         except Exception:
             pass
+
+    def _reset_state(self) -> None:
+        try:
+            if self.state_path.exists():
+                self.state_path.unlink(missing_ok=True)  # type: ignore[arg-type]
+        except Exception:
+            pass
+        self.current_position = 0.0
+        self.current_signal = 0.0
+        self.prev_signal = 0.0
+        self.entry_price = None
+        self.position_size = 0.0
+        self.current_capital = self.initial_capital
+        self._save_state()
     
     def get_state(self) -> Dict[str, Any]:
         """Get current engine state."""
