@@ -60,13 +60,17 @@ class OrderBookStreamer:
         """Register a callback to be called on each orderbook update."""
         self.update_callbacks.append(callback)
     
-    async def start(self, mode: str = "futures") -> None:
+    async def start(self, mode: str = "futures", testnet: bool = False) -> None:
         """Start the WebSocket connection and begin streaming."""
         self.running = True
         
         # Determine WebSocket URL based on mode
         if mode.lower() == "futures":
-            ws_url = f"wss://fstream.binance.com/ws/{self.symbol.lower()}@depth@{self.update_interval_ms}ms"
+            # Use testnet endpoint if requested
+            if testnet:
+                ws_url = f"wss://fstream.binancefuture.com/ws/{self.symbol.lower()}@depth@{self.update_interval_ms}ms"
+            else:
+                ws_url = f"wss://fstream.binance.com/ws/{self.symbol.lower()}@depth@{self.update_interval_ms}ms"
         else:
             ws_url = f"wss://stream.binance.com:9443/ws/{self.symbol.lower()}@depth@{self.update_interval_ms}ms"
         

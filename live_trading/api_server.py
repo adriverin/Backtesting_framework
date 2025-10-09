@@ -86,17 +86,23 @@ class DashboardServer:
         
         @self.app.get("/api/equity_curve")
         async def get_equity_curve():
-            """Get equity curve data."""
+            """Get equity curve data and cumulative returns."""
             equity_df = self.trading_engine.performance_tracker.get_equity_curve()
-            
             if equity_df.empty:
-                return {'timestamps': [], 'equity': [], 'capital': [], 'unrealized_pnl': []}
-            
+                return {'timestamps': [], 'equity': [], 'capital': [], 'unrealized_pnl': [], 'cum_returns_pct': [], 'initial_capital': float(self.trading_engine.performance_tracker.initial_capital)}
+
+            # Cumulative returns as percentage relative to initial capital
+            initial_capital = float(self.trading_engine.performance_tracker.initial_capital)
+            equities = equity_df['equity'].astype(float).tolist()
+            cum_returns_pct = [((e - initial_capital) / initial_capital) * 100.0 for e in equities]
+
             return {
                 'timestamps': [ts.isoformat() for ts in equity_df['timestamp']],
-                'equity': equity_df['equity'].tolist(),
-                'capital': equity_df['capital'].tolist(),
-                'unrealized_pnl': equity_df['unrealized_pnl'].tolist(),
+                'equity': equities,
+                'capital': equity_df['capital'].astype(float).tolist(),
+                'unrealized_pnl': equity_df['unrealized_pnl'].astype(float).tolist(),
+                'cum_returns_pct': cum_returns_pct,
+                'initial_capital': initial_capital,
             }
         
         @self.app.get("/api/trades")

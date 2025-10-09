@@ -56,7 +56,8 @@ class TradingEngine:
         # Runtime state
         self.running = False
         self.last_signal_update: float = 0
-        self.signal_update_interval: int = 60  # Update signals every 60 seconds
+        # Update signals interval (configurable)
+        self.signal_update_interval: int = int(config.get('runtime.signal_update_interval_sec', 60))
         
         # Binance client (for order execution)
         self.exchange = None
@@ -120,26 +121,31 @@ class TradingEngine:
         """Initialize Binance exchange connection."""
         try:
             import ccxt.async_support as ccxt  # type: ignore
-            
+
             api_key = self.config.get('binance.api_key', '')
             api_secret = self.config.get('binance.api_secret', '')
             testnet = self.config.get('binance.testnet', False)
-            
+
             if self.config['mode'] == 'futures':
-                self.exchange = ccxt.binance({
+                # Prefer dedicated USDT-M futures exchange
+                self.exchange = ccxt.binanceusdm({
                     'apiKey': api_key,
                     'secret': api_secret,
                     'enableRateLimit': True,
-                    'options': {'defaultType': 'future'},
                 })
-                if testnet:
-                    self.exchange.set_sandbox_mode(True)
             else:
                 self.exchange = ccxt.binance({
                     'apiKey': api_key,
                     'secret': api_secret,
                     'enableRateLimit': True,
                 })
+
+            # Enable testnet if requested
+            if testnet:
+                try:
+                    self.exchange.set_sandbox_mode(True)
+                except Exception:
+                    pass
             
             # Test connection
             if api_key and api_secret:
@@ -183,7 +189,7 @@ class TradingEngine:
         self.running = True
         
         # Start orderbook streamer
-        asyncio.create_task(self.orderbook_streamer.start(self.config['mode']))
+        asyncio.create_task(self.orderbook_streamer.start(self.config['mode'], bool(self.config.get('binance.testnet', False))))
         
         # Wait for initial data
         print("[TradingEngine] Waiting for price data...")
@@ -311,9 +317,10 @@ class TradingEngine:
             direction: 1 for long, -1 for short
         """
         try:
-            # Get current price
+            # Get current price (use valuation price column to match UI/mark)
+            valuation_col = self.config.get('valuation_price_column', 'close')
             price_column = self.config['price_column']
-            current_price = self.price_feeder.get_latest_price(price_column)
+            current_price = self.price_feeder.get_latest_price(valuation_col) or self.price_feeder.get_latest_price(price_column)
             
             if current_price is None:
                 print("[TradingEngine] Cannot open position: no price available")
@@ -402,15 +409,16 @@ class TradingEngine:
             return
         
         try:
-            # Get current price
+            # Get current price (valuation)
+            valuation_col = self.config.get('valuation_price_column', 'close')
             price_column = self.config['price_column']
-            current_price = self.price_feeder.get_latest_price(price_column)
+            current_price = self.price_feeder.get_latest_price(valuation_col) or self.price_feeder.get_latest_price(price_column)
             
             if current_price is None:
                 print("[TradingEngine] Cannot close position: no price available")
                 return
             
-            # Calculate P&L
+            # Calculate P&L using valuation price (match charts/UI)
             if self.entry_price:
                 if self.current_position > 0:
                     # Long position

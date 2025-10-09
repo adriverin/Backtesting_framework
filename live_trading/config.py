@@ -117,6 +117,7 @@ class TradingConfig:
                 "auto_restart": True,
                 "max_restart_attempts": 10,
                 "restart_delay_sec": 60,
+                "signal_update_interval_sec": int(os.getenv("SIGNAL_UPDATE_INTERVAL_SEC", "5")),
             }
         }
         

@@ -286,6 +286,10 @@
         <h3>💹 Cumulative Returns</h3>
         <canvas id="equity-chart"></canvas>
     </div>
+    <div class="chart-container" style="margin-top: 20px;">
+        <h3>📉 Equity (USD)</h3>
+        <canvas id="equity-usd-chart"></canvas>
+    </div>
 
     <!-- Trades Table -->
     <div class="chart-container" style="margin-top: 20px;">
@@ -318,9 +322,9 @@
             data: {
                 labels: [],
                 datasets: [{
-                    label: 'Equity',
+                    label: 'Cumulative Return %',
                     data: [],
-                    borderColor: '#3a7bd5',
+                    borderColor: '#00d2ff',
                     backgroundColor: 'rgba(58, 123, 213, 0.1)',
                     fill: true,
                     tension: 0.4,
@@ -352,10 +356,36 @@
                         ticks: {
                             color: '#a0a0a0',
                             callback: function(value) {
-                                return '$' + value.toFixed(2);
+                                return value.toFixed(2) + '%';
                             }
                         }
                     }
+                }
+            }
+        });
+
+        const ctx2 = document.getElementById('equity-usd-chart').getContext('2d');
+        const equityUsdChart = new Chart(ctx2, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Equity (USD)',
+                    data: [],
+                    borderColor: '#3a7bd5',
+                    backgroundColor: 'rgba(58, 123, 213, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                aspectRatio: 3,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { color: 'rgba(255, 255, 255, 0.1)' }, ticks: { color: '#a0a0a0', maxTicksLimit: 10 } },
+                    y: { grid: { color: 'rgba(255, 255, 255, 0.1)' }, ticks: { color: '#a0a0a0', callback: function(value) { return '$' + value.toFixed(2); } } }
                 }
             }
         });
@@ -469,15 +499,18 @@
 
         function updateEquityCurve(data) {
             if (!data.timestamps || data.timestamps.length === 0) return;
-            
-            const labels = data.timestamps.map(ts => {
-                const date = new Date(ts);
-                return date.toLocaleTimeString();
-            });
-            
+
+            const labels = data.timestamps.map(ts => new Date(ts).toLocaleTimeString());
+
+            // Update returns chart (percentage)
             equityChart.data.labels = labels;
-            equityChart.data.datasets[0].data = data.equity;
+            equityChart.data.datasets[0].data = data.cum_returns_pct || [];
             equityChart.update('none');
+
+            // Update equity USD chart
+            equityUsdChart.data.labels = labels;
+            equityUsdChart.data.datasets[0].data = data.equity || [];
+            equityUsdChart.update('none');
         }
 
         function updateTradesTable(trades) {
