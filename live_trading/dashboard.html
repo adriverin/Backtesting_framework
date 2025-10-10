@@ -279,13 +279,29 @@
                 <span class="metric-value negative" id="avg-loss">$0.00</span>
             </div>
         </div>
+
+        <!-- Market & Signal Card -->
+        <div class="card">
+            <h3>🧭 Market & Signal</h3>
+            <div class="metric">
+                <span class="metric-label">Current Price</span>
+                <span class="metric-value" id="current-price">-</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">z-score</span>
+                <span class="metric-value" id="current-zscore">-</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">z-threshold</span>
+                <span class="metric-value" id="z-threshold">-</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">exit band</span>
+                <span class="metric-value" id="exit-band">-</span>
+            </div>
+        </div>
     </div>
 
-    <!-- Equity Curve Chart -->
-    <div class="chart-container">
-        <h3>💹 Cumulative Returns</h3>
-        <canvas id="equity-chart"></canvas>
-    </div>
     <div class="chart-container" style="margin-top: 20px;">
         <h3>📉 Equity (USD)</h3>
         <canvas id="equity-usd-chart"></canvas>
@@ -315,55 +331,7 @@
     </div>
 
     <script>
-        // Chart setup
-        const ctx = document.getElementById('equity-chart').getContext('2d');
-        const equityChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Cumulative Return %',
-                    data: [],
-                    borderColor: '#00d2ff',
-                    backgroundColor: 'rgba(58, 123, 213, 0.1)',
-                    fill: true,
-                    tension: 0.4,
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                aspectRatio: 3,
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: {
-                            color: 'rgba(255, 255, 255, 0.1)'
-                        },
-                        ticks: {
-                            color: '#a0a0a0',
-                            maxTicksLimit: 10
-                        }
-                    },
-                    y: {
-                        grid: {
-                            color: 'rgba(255, 255, 255, 0.1)'
-                        },
-                        ticks: {
-                            color: '#a0a0a0',
-                            callback: function(value) {
-                                return value.toFixed(2) + '%';
-                            }
-                        }
-                    }
-                }
-            }
-        });
-
+        // Chart setup (Equity USD only)
         const ctx2 = document.getElementById('equity-usd-chart').getContext('2d');
         const equityUsdChart = new Chart(ctx2, {
             type: 'line',
@@ -455,6 +423,10 @@
             const capital = engine.capital || 0;
             const unrealizedPnl = engine.unrealized_pnl || 0;
             const position = engine.position || 0;
+            const price = engine.price;
+            const zScore = engine.z_score;
+            const zThreshold = engine.z_threshold;
+            const exitBand = engine.exit_band;
             
             document.getElementById('total-equity').textContent = '$' + totalValue.toFixed(2);
             document.getElementById('capital').textContent = '$' + capital.toFixed(2);
@@ -479,6 +451,26 @@
             document.getElementById('signal').textContent = engine.signal || 0;
             document.getElementById('entry-price').textContent = engine.entry_price ? engine.entry_price.toFixed(6) : '-';
             document.getElementById('position-size').textContent = engine.position_size ? engine.position_size.toFixed(6) : '-';
+
+            // Market & Signal card
+            const priceEl = document.getElementById('current-price');
+            priceEl.textContent = (price !== undefined && price !== null) ? ('$' + Number(price).toFixed(6)) : '-';
+
+            const zEl = document.getElementById('current-zscore');
+            if (zScore !== undefined && zScore !== null) {
+                const z = Number(zScore);
+                zEl.textContent = z.toFixed(3);
+                zEl.className = 'metric-value ' + (z > 0 ? 'positive' : (z < 0 ? 'negative' : ''));
+            } else {
+                zEl.textContent = '-';
+                zEl.className = 'metric-value';
+            }
+
+            const ztEl = document.getElementById('z-threshold');
+            ztEl.textContent = (zThreshold !== undefined && zThreshold !== null) ? Number(zThreshold).toFixed(2) : '-';
+
+            const ebEl = document.getElementById('exit-band');
+            ebEl.textContent = (exitBand !== undefined && exitBand !== null) ? Number(exitBand).toFixed(2) : '-';
         }
 
         function updateMetrics(metrics) {
@@ -501,12 +493,6 @@
             if (!data.timestamps || data.timestamps.length === 0) return;
 
             const labels = data.timestamps.map(ts => new Date(ts).toLocaleTimeString());
-
-            // Update returns chart (percentage)
-            equityChart.data.labels = labels;
-            equityChart.data.datasets[0].data = data.cum_returns_pct || [];
-            equityChart.update('none');
-
             // Update equity USD chart
             equityUsdChart.data.labels = labels;
             equityUsdChart.data.datasets[0].data = data.equity || [];

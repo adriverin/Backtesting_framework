@@ -594,6 +594,34 @@ class TradingEngine:
     
     def get_state(self) -> Dict[str, Any]:
         """Get current engine state."""
+        # Latest price for display (prefer valuation column if configured)
+        latest_price: float | None = None
+        try:
+            if self.price_feeder is not None:
+                valuation_col = self.config.get('valuation_price_column', self.config['price_column'])
+                latest_price = self.price_feeder.get_latest_price(valuation_col) or self.price_feeder.get_latest_price(self.config['price_column'])
+        except Exception:
+            latest_price = None
+
+        # Compute live z-score using current orderbook buffer and strategy params
+        z_val: float | None = None
+        try:
+            z_val = self._compute_live_z_score()
+        except Exception:
+            z_val = None
+
+        # Strategy thresholds (if available)
+        z_threshold = None
+        exit_band = None
+        try:
+            if self.strategy is not None and hasattr(self.strategy, 'z_threshold'):
+                z_threshold = float(getattr(self.strategy, 'z_threshold'))
+            if self.strategy is not None and hasattr(self.strategy, 'exit_band'):
+                eb = getattr(self.strategy, 'exit_band')
+                exit_band = None if eb is None else float(eb)
+        except Exception:
+            pass
+
         return {
             'position': self.current_position,
             'signal': self.current_signal,
@@ -602,5 +630,99 @@ class TradingEngine:
             'capital': self.current_capital,
             'unrealized_pnl': self.unrealized_pnl,
             'total_value': self.current_capital + self.unrealized_pnl,
+            'price': latest_price,
+            'z_score': z_val,
+            'z_threshold': z_threshold,
+            'exit_band': exit_band,
         }
+
+    def _compute_live_z_score(self) -> float | None:
+        """Compute the current z-score matching the orderbook depth strategy settings.
+
+        Uses the in-memory orderbook buffer to approximate the rolling statistics.
+        Returns None if insufficient data or parameters are unavailable.
+        """
+        # Ensure components exist
+        if self.orderbook_streamer is None:
+            return None
+        if self.strategy is None:
+            return None
+
+        # Determine percentage and lookback windows
+        try:
+            percentage = int(self.strategy_params.get('percentage', 1))
+        except Exception:
+            percentage = 1
+
+        lb_mean = None
+        lb_cur = None
+        # Prefer optimized params if available
+        try:
+            best_params = getattr(self.strategy, 'best_params', None)
+            if best_params is not None:
+                lb_mean, lb_cur = best_params
+        except Exception:
+            lb_mean = None
+            lb_cur = None
+
+        # Fallback to fixed params if provided
+        if lb_mean is None or lb_cur is None:
+            try:
+                lb_mean = getattr(self.strategy, 'lookback_mean_fixed', None)
+                lb_cur = getattr(self.strategy, 'lookback_current_fixed', None)
+            except Exception:
+                pass
+
+        # If still unavailable, cannot compute
+        if lb_mean is None or lb_cur is None:
+            return None
+
+        # Build DataFrame from buffer
+        df = self.orderbook_streamer.get_dataframe()
+        if df.empty:
+            return None
+
+        # Pivot to get notional at ±percentage
+        try:
+            pivot = df.pivot(index='timestamp', columns='percentage', values='notional').sort_index()
+        except Exception:
+            return None
+
+        if (percentage not in pivot.columns) or (-percentage not in pivot.columns):
+            return None
+
+        ask = pivot[percentage]
+        bid = pivot[-percentage]
+        aligned = pd.concat({'ask': ask, 'bid': bid}, axis=1).dropna()
+        if aligned.empty:
+            return None
+
+        # Ratio series
+        eps = 1e-9
+        ratio = aligned['bid'] / (aligned['ask'] + aligned['bid'] + eps)
+
+        # Rolling stats: support both time-based (str) and count-based (int)
+        def _rolling_mean_std(series: pd.Series, window: str | int) -> tuple[pd.Series, pd.Series]:
+            if isinstance(window, str):
+                r_mean = series.rolling(window).mean()
+                r_std = series.rolling(window).std()
+            else:
+                r_mean = series.rolling(window=window, min_periods=window).mean()
+                r_std = series.rolling(window=window, min_periods=window).std()
+            return r_mean, r_std
+
+        def _rolling_current(series: pd.Series, window: str | int) -> pd.Series:
+            if isinstance(window, str):
+                return series.rolling(window).mean()
+            return series.rolling(window=window, min_periods=window).mean()
+
+        r_ma, r_std = _rolling_mean_std(ratio, lb_mean)
+        r_current = _rolling_current(ratio, lb_cur)
+
+        z_series = -(r_current - r_ma) / (r_std + eps)
+        if z_series.empty:
+            return None
+
+        z_latest = float(z_series.dropna().iloc[-1]) if not z_series.dropna().empty else None
+        return z_latest
 
