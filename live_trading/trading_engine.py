@@ -549,19 +549,73 @@ class TradingEngine:
             if self.state_path.exists():
                 with open(self.state_path, 'r') as f:
                     st = json.load(f)
-                self.current_position = float(st.get('current_position', 0.0))
-                self.current_signal = float(st.get('last_signal', 0.0))
-                self.prev_signal = float(st.get('last_signal', 0.0))
-                self.entry_price = st.get('entry_price', None)
+                
+                # Handle both new and old state format for backward compatibility
+                # New format: current_position, entry_price, position_size, last_signal
+                # Old format: position_qty, position_entry_price, prev_signal
+                
+                # Load position - check both old and new keys
+                if 'current_position' in st:
+                    self.current_position = float(st['current_position'])
+                elif 'position_qty' in st:
+                    # Old format: infer position direction from prev_signal
+                    pos_qty = float(st.get('position_qty', 0.0))
+                    if pos_qty != 0:
+                        # If we have a position, check prev_signal to determine direction
+                        old_signal = float(st.get('prev_signal', 0.0))
+                        if old_signal > 0:
+                            self.current_position = 1.0  # Long
+                        elif old_signal < 0:
+                            self.current_position = -1.0  # Short
+                        else:
+                            self.current_position = 0.0
+                    else:
+                        self.current_position = 0.0
+                else:
+                    self.current_position = 0.0
+                
+                # Load entry price
+                if 'entry_price' in st:
+                    self.entry_price = st.get('entry_price')
+                elif 'position_entry_price' in st:
+                    self.entry_price = st.get('position_entry_price')
+                else:
+                    self.entry_price = None
                 if self.entry_price is not None:
                     self.entry_price = float(self.entry_price)
-                self.position_size = float(st.get('position_size', 0.0))
-                # Keep current_capital as-is unless present
+                
+                # Load position size
+                if 'position_size' in st:
+                    self.position_size = float(st['position_size'])
+                elif 'position_qty' in st:
+                    self.position_size = abs(float(st.get('position_qty', 0.0)))
+                else:
+                    self.position_size = 0.0
+                
+                # Load signal state
+                if 'last_signal' in st:
+                    self.current_signal = float(st['last_signal'])
+                    self.prev_signal = float(st['last_signal'])
+                elif 'prev_signal' in st:
+                    # Old format - use prev_signal as last known signal
+                    old_sig = float(st['prev_signal'])
+                    self.current_signal = old_sig
+                    self.prev_signal = old_sig
+                else:
+                    self.current_signal = 0.0
+                    self.prev_signal = 0.0
+                
+                # Load capital
                 if 'current_capital' in st:
                     self.current_capital = float(st['current_capital'])
+                
                 print(f"[TradingEngine] State loaded from {self.state_path}")
+                print(f"[TradingEngine]   Position: {self.current_position}, Entry: {self.entry_price}, Size: {self.position_size}")
+                print(f"[TradingEngine]   Signal: {self.current_signal}, Prev signal: {self.prev_signal}")
         except Exception as e:
             print(f"[TradingEngine] Failed to load state: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _save_state(self) -> None:
         try:
