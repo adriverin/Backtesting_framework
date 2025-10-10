@@ -1,4 +1,20 @@
-"""Real-time order book depth data streamer using Binance WebSocket."""
+"""Real-time order book depth data streamer using Binance WebSocket.
+
+This streamer computes percent-distance buckets, not raw level indices.
+
+For each update, it emits rows for ±1..±N percent-of-price buckets where N is
+`max_levels` (interpreted as number of percent buckets). For a given bucket p:
+  - On the ask side (+p), we sum quantity and notional across asks needed to
+    move the best ask up by p% (i.e., consume all asks strictly below
+    best_ask * (1 + p/100)).
+  - On the bid side (−p), we sum quantity and notional across bids needed to
+    move the best bid down by p% (i.e., consume all bids strictly above
+    best_bid * (1 − p/100)).
+
+The resulting schema matches the historical orderbook depth files used during
+backtests: columns [timestamp, percentage, depth, notional], where
+`percentage` ∈ {−N, …, −1, 1, …, N} denotes ±percent buckets, not level index.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -15,11 +31,12 @@ import numpy as np
 class OrderBookStreamer:
     """Stream and process live order book depth data from Binance.
     
-    Transforms raw order book snapshots into the format used by the strategy:
+    Transforms raw order book updates into percent-distance buckets compatible
+    with the historical dataset used by the strategy:
     - timestamp: datetime
-    - percentage: int (1 to 5 for ask, -1 to -5 for bid)
-    - depth: float (cumulative quantity at that level)
-    - notional: float (cumulative value at that level)
+    - percentage: int (±1..±N interpreted as ±percent-of-price buckets)
+    - depth: float (cumulative quantity needed to move to that ±percent)
+    - notional: float (cumulative price*qty over consumed levels)
     """
     
     def __init__(
@@ -33,8 +50,8 @@ class OrderBookStreamer:
         
         Args:
             symbol: Trading symbol (e.g., 'VETUSDT')
-            max_levels: Maximum depth levels to track (±1 to ±max_levels)
-            update_interval_ms: WebSocket update frequency
+            max_levels: Number of percent buckets to compute (±1%..±max_levels%)
+            update_interval_ms: WebSocket update frequency (ms)
             buffer_size: Maximum number of snapshots to keep in memory
         """
         self.symbol = symbol.upper()
@@ -103,7 +120,7 @@ class OrderBookStreamer:
                 await self.start(mode)
     
     async def _process_update(self, data: Dict) -> None:
-        """Process raw WebSocket orderbook update."""
+        """Process raw WebSocket orderbook update into ±percent buckets."""
         try:
             # Extract bids and asks
             bids = data.get('b', [])  # [[price, qty], ...]
@@ -120,39 +137,59 @@ class OrderBookStreamer:
             bids.sort(key=lambda x: x[0], reverse=True)
             asks.sort(key=lambda x: x[0])
             
-            # Calculate cumulative depth and notional for each level
+            # Compute percent-of-price buckets relative to current best bid/ask
             timestamp = datetime.now(timezone.utc).replace(tzinfo=None)
             
             processed_rows = []
             
-            # Process bid side (negative percentages: -1, -2, -3, ...)
-            cumulative_bid_qty = 0.0
-            cumulative_bid_notional = 0.0
-            for i in range(min(self.max_levels, len(bids))):
-                price, qty = bids[i]
-                cumulative_bid_qty += qty
-                cumulative_bid_notional += price * qty
-                
+            best_bid = bids[0][0]
+            best_ask = asks[0][0]
+
+            # Helper: accumulate until price threshold is crossed
+            def compute_ask_bucket(pct: int) -> tuple[float, float]:
+                target = best_ask * (1.0 + (pct / 100.0))
+                cum_qty = 0.0
+                cum_notional = 0.0
+                # Consume asks strictly below target; moving best ask up to target
+                for price, qty in asks:
+                    if price < target:
+                        cum_qty += qty
+                        cum_notional += price * qty
+                    else:
+                        break
+                return cum_qty, cum_notional
+
+            def compute_bid_bucket(pct: int) -> tuple[float, float]:
+                target = best_bid * (1.0 - (pct / 100.0))
+                cum_qty = 0.0
+                cum_notional = 0.0
+                # Consume bids strictly above target; moving best bid down to target
+                for price, qty in bids:
+                    if price > target:
+                        cum_qty += qty
+                        cum_notional += price * qty
+                    else:
+                        break
+                return cum_qty, cum_notional
+
+            max_pct = max(0, int(self.max_levels))
+            for pct in range(1, max_pct + 1):
+                # Bid side (negative percentage)
+                b_qty, b_notional = compute_bid_bucket(pct)
                 processed_rows.append({
                     'timestamp': timestamp,
-                    'percentage': -(i + 1),
-                    'depth': cumulative_bid_qty,
-                    'notional': cumulative_bid_notional,
+                    'percentage': -pct,
+                    'depth': b_qty,
+                    'notional': b_notional,
                 })
-            
-            # Process ask side (positive percentages: +1, +2, +3, ...)
-            cumulative_ask_qty = 0.0
-            cumulative_ask_notional = 0.0
-            for i in range(min(self.max_levels, len(asks))):
-                price, qty = asks[i]
-                cumulative_ask_qty += qty
-                cumulative_ask_notional += price * qty
-                
+
+                # Ask side (positive percentage)
+                a_qty, a_notional = compute_ask_bucket(pct)
                 processed_rows.append({
                     'timestamp': timestamp,
-                    'percentage': i + 1,
-                    'depth': cumulative_ask_qty,
-                    'notional': cumulative_ask_notional,
+                    'percentage': pct,
+                    'depth': a_qty,
+                    'notional': a_notional,
                 })
             
             # Add to buffer

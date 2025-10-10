@@ -70,7 +70,9 @@ class TradingConfig:
             
             # Data collection
             "data": {
-                "orderbook_depth_levels": 5,  # How many levels to collect (±1 to ±5)
+                # Number of percent-of-price buckets to compute per side (±1%..±N%)
+                # This drives live transformation to match historical orderbook depth files
+                "orderbook_depth_levels": 5,
                 "orderbook_update_interval_ms": 100,  # WebSocket update frequency
                 "price_update_interval_sec": 30,  # Price data polling interval
                 "data_dir": "data",
