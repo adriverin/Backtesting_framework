@@ -305,17 +305,30 @@ class TradingEngine:
     
     async def _check_position_changes(self) -> None:
         """Check if we need to open/close positions based on signals."""
+        # Position matches signal - all good
         if self.current_signal == self.current_position:
-            return  # No change needed
+            return
         
-        # Determine action
-        # Only open on signal change to avoid duplicate re-opens after restart
-        if self.current_position == 0 and self.current_signal != 0 and self.current_signal != self.prev_signal:
+        # Position doesn't match signal - need to adjust
+        # Use time-based duplicate prevention instead of signal comparison
+        current_time = time.time()
+        min_time_between_opens = 10  # seconds - prevent rapid re-opens
+        
+        if self.current_position == 0 and self.current_signal != 0:
+            # Need to open position
+            # Check if we just recently opened (within last 10 seconds)
+            time_since_last_update = current_time - self.last_signal_update
+            if time_since_last_update < min_time_between_opens and self.prev_signal == self.current_signal:
+                # Just updated signals, wait to avoid duplicate
+                return
+            
             # Open new position
             await self._open_position(self.current_signal)
+            
         elif self.current_position != 0 and self.current_signal == 0:
             # Close position
             await self._close_position()
+            
         elif self.current_position != 0 and self.current_signal != 0 and self.current_signal != self.current_position:
             # Reverse position
             await self._close_position()
