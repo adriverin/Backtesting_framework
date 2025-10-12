@@ -280,7 +280,9 @@ class TradingEngine:
             
             self.current_signal = latest_signal
             
-            print(f"[TradingEngine] Signal: {latest_signal} | Position: {self.current_position} | z-score: {z_score:.4f if z_score else 'N/A'} | threshold: {z_threshold} | exit_band: {exit_band}")
+            # Format z-score safely
+            z_score_str = f"{z_score:.4f}" if z_score is not None else "N/A"
+            print(f"[TradingEngine] Signal: {latest_signal} | Position: {self.current_position} | z-score: {z_score_str} | threshold: {z_threshold} | exit_band: {exit_band}")
         
         except Exception as e:
             print(f"[TradingEngine] Error updating signals: {e}")
