@@ -109,15 +109,22 @@ class OrderBookStreamer:
                         # Send ping to keep connection alive
                         await websocket.ping()
                     except Exception as e:
-                        print(f"[OrderBookStreamer] Error processing message: {e}")
-                        await asyncio.sleep(1)
+                        # WebSocket connection errors trigger reconnection
+                        error_str = str(e)
+                        if 'close frame' in error_str.lower() or 'connection' in error_str.lower():
+                            print(f"[OrderBookStreamer] Connection lost: {e}. Reconnecting...")
+                            break  # Exit inner loop to trigger reconnection
+                        else:
+                            print(f"[OrderBookStreamer] Error processing message: {e}")
+                            await asyncio.sleep(1)
         
         except Exception as e:
             print(f"[OrderBookStreamer] WebSocket error: {e}")
             if self.running:
                 # Attempt to reconnect after delay
+                print("[OrderBookStreamer] Reconnecting in 5 seconds...")
                 await asyncio.sleep(5)
-                await self.start(mode)
+                await self.start(mode, testnet)
     
     async def _process_update(self, data: Dict) -> None:
         """Process raw WebSocket orderbook update into ±percent buckets."""
