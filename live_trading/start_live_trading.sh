@@ -3,7 +3,12 @@
 # Live Trading System Startup Script
 # This script starts both the price feeder and the live trading system
 
+
 set -e
+
+# Make sure scripts are not running 
+pkill -f live_feeder_ccxt
+pkill -f run_live.py
 
 # Colors for output
 GREEN='\033[0;32m'
