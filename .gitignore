@@ -41,3 +41,4 @@ live_trading/DOUBLE_SHUTDOWN_FIX.md
 live_trading/JSON_SERIALIZATION_FIX.md
 live_trading/POSITION_SIGNAL_MISMATCH_FIX.md
 live_trading/SIGNAL_DIAGNOSIS.md
+live_trading/WHY_SIGNAL_DOESNT_CHANGE.md

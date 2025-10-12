@@ -255,12 +255,6 @@ class TradingEngine:
             # For orderbook depth strategy, we need to manually save orderbook data
             # to the expected location for the strategy to read
             if self.config['strategy']['name'] == 'orderbook_depth':
-                # Debug: show orderbook data freshness
-                if not orderbook_df.empty:
-                    latest_ts = orderbook_df['timestamp'].max()
-                    data_age_sec = (pd.Timestamp.now(tz='UTC') - latest_ts).total_seconds()
-                    print(f"[TradingEngine] Orderbook data: {len(orderbook_df)} rows, latest: {latest_ts}, age: {data_age_sec:.1f}s")
-                
                 await self._save_orderbook_snapshot(orderbook_df)
             
             # Generate signals
@@ -270,75 +264,39 @@ class TradingEngine:
                 print("[TradingEngine] No signals generated")
                 return
             
+            # Debug: Show data being used (only on first run or every 10 minutes)
+            current_time = time.time()
+            if not hasattr(self, '_last_data_debug') or (current_time - self._last_data_debug > 600):
+                self._last_data_debug = current_time
+                # Count historical orderbook data
+                if self.config['strategy']['name'] == 'orderbook_depth':
+                    base_dir = self.config.get('data.orderbook_depth_dir', 'data/orderbook_depth')
+                    symbol_dir = Path(base_dir) / self.config['symbol']
+                    csv_files = list(symbol_dir.glob('*.csv'))
+                    print(f"[TradingEngine] 📊 Strategy using {len(csv_files)} days of historical orderbook data")
+                    print(f"[TradingEngine] 📊 Adding ~17,280 new datapoints per day (5s intervals)")
+                    print(f"[TradingEngine] 📊 With 210 days = ~3.6M datapoints, new data has <0.0005% impact per update")
+            
             # Get latest signal
             latest_signal = float(signals.iloc[-1])
+            prev_signal = self.prev_signal
             
-            # Get z-score for debugging
-            z_score = self._compute_live_z_score()
+            # Debug info
             z_threshold = getattr(self.strategy, 'z_threshold', None)
             exit_band = getattr(self.strategy, 'exit_band', None)
             
             self.current_signal = latest_signal
             
-            # Format z-score safely
-            z_score_str = f"{z_score:.4f}" if z_score is not None else "N/A"
-            print(f"[TradingEngine] Signal: {latest_signal} | Position: {self.current_position} | z-score: {z_score_str} | threshold: {z_threshold} | exit_band: {exit_band}")
+            # Show signal change details
+            if latest_signal != prev_signal:
+                print(f"[TradingEngine] ⚡ SIGNAL CHANGE: {prev_signal} → {latest_signal} | Position: {self.current_position} | threshold: {z_threshold} | exit_band: {exit_band}")
+            else:
+                print(f"[TradingEngine] Signal: {latest_signal} | Position: {self.current_position} | (unchanged)")
         
         except Exception as e:
             print(f"[TradingEngine] Error updating signals: {e}")
             import traceback
             traceback.print_exc()
-    
-    def _compute_live_z_score(self) -> float | None:
-        """Compute current z-score for debugging."""
-        try:
-            if not hasattr(self, 'orderbook_streamer') or not self.orderbook_streamer:
-                return None
-            
-            # Get orderbook data from streamer buffer
-            orderbook_df = self.orderbook_streamer.get_orderbook_dataframe()
-            if orderbook_df.empty:
-                return None
-            
-            # Get strategy parameters
-            percentage = getattr(self.strategy, 'percentage', 2)
-            eps = 1e-9
-            
-            # Pivot and calculate ratio (same logic as strategy)
-            df = orderbook_df.pivot(index="timestamp", columns="percentage", values="notional").sort_index()
-            if (percentage not in df.columns) or (-percentage not in df.columns):
-                return None
-            
-            ask = df[percentage]
-            bid = df[-percentage]
-            aligned = pd.concat({"ask": ask, "bid": bid}, axis=1).dropna()
-            if aligned.empty:
-                return None
-            
-            ratio = aligned["bid"] / (aligned["ask"] + aligned["bid"] + eps)
-            
-            # Get lookback parameters
-            lookback_mean = getattr(self.strategy, 'lookback_mean_fixed', None)
-            lookback_current = getattr(self.strategy, 'lookback_current_fixed', None)
-            
-            if not lookback_mean or not lookback_current:
-                return None
-            
-            # Calculate rolling stats (time-based windows)
-            r_ma = ratio.rolling(lookback_mean).mean()
-            r_std = ratio.rolling(lookback_mean).std()
-            r_current = ratio.rolling(lookback_current).mean()
-            
-            # Calculate z-score
-            z_score = -(r_current - r_ma) / (r_std + eps)
-            
-            if not z_score.empty:
-                return float(z_score.iloc[-1])
-            
-            return None
-        except Exception as e:
-            print(f"[TradingEngine] Error computing z-score: {e}")
-            return None
     
     async def _save_orderbook_snapshot(self, orderbook_df: pd.DataFrame) -> None:
         """Save orderbook snapshot for strategy to read."""
