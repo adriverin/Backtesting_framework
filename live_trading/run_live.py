@@ -36,6 +36,7 @@ class LiveTradingSystem:
         
         # Runtime state
         self.running = False
+        self.stopping = False  # Flag to prevent multiple shutdown attempts
         self.restart_count = 0
         self.max_restart_attempts = self.config.get('runtime.max_restart_attempts', 10)
     
@@ -164,11 +165,16 @@ class LiveTradingSystem:
     
     async def stop(self) -> None:
         """Stop the live trading system."""
+        # Prevent multiple shutdown attempts
+        if self.stopping:
+            return
+        
+        self.stopping = True
+        self.running = False
+        
         print("=" * 80)
         print("🛑 SHUTTING DOWN LIVE TRADING SYSTEM")
         print("=" * 80)
-        
-        self.running = False
         
         # Stop all components
         await self._stop_components()
@@ -226,10 +232,15 @@ async def main():
     
     # Setup signal handlers for graceful shutdown
     loop = asyncio.get_event_loop()
+    shutdown_event = asyncio.Event()
     
     def signal_handler():
-        print("\n⚠️  Shutdown signal received...")
-        asyncio.create_task(system.stop())
+        """Handle shutdown signals (only triggers once)."""
+        if not shutdown_event.is_set():
+            print("\n⚠️  Shutdown signal received...")
+            shutdown_event.set()
+            # Stop the running tasks by setting the running flag
+            system.running = False
     
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, signal_handler)
@@ -241,9 +252,12 @@ async def main():
     
     except KeyboardInterrupt:
         print("\n⚠️  Keyboard interrupt received...")
+        shutdown_event.set()
     
     finally:
-        await system.stop()
+        # Only call stop once
+        if not system.stopping:
+            await system.stop()
 
 
 if __name__ == "__main__":

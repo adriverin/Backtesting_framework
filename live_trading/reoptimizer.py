@@ -195,6 +195,10 @@ class StrategyReoptimizer:
     
     async def stop(self) -> None:
         """Stop the re-optimization loop."""
+        # Prevent multiple stop attempts
+        if not self.running:
+            return
+        
         self.running = False
         print("[Reoptimizer] Stopped")
     

@@ -538,6 +538,10 @@ class TradingEngine:
     
     async def stop(self) -> None:
         """Stop the trading engine."""
+        # Prevent multiple stop attempts
+        if not self.running:
+            return
+        
         print("[TradingEngine] Stopping...")
         self.running = False
         
