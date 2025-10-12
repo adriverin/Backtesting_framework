@@ -40,3 +40,4 @@ live_trading/CTRL_C_FIX.md
 live_trading/DOUBLE_SHUTDOWN_FIX.md
 live_trading/JSON_SERIALIZATION_FIX.md
 live_trading/POSITION_SIGNAL_MISMATCH_FIX.md
+live_trading/SIGNAL_DIAGNOSIS.md
