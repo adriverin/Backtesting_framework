@@ -85,7 +85,7 @@ class OrderBookStreamer:
         if mode.lower() == "futures":
             # Use testnet endpoint if requested
             if testnet:
-                ws_url = f"wss://fstream.binancefuture.com/ws/{self.symbol.lower()}@depth@{self.update_interval_ms}ms"
+                ws_url = f"wss://stream.binancefuture.com/ws/{self.symbol.lower()}@depth@{self.update_interval_ms}ms"
             else:
                 ws_url = f"wss://fstream.binance.com/ws/{self.symbol.lower()}@depth@{self.update_interval_ms}ms"
         else:

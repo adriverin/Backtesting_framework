@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import math
+import json
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 from collections import deque
+from pathlib import Path
 
 import pandas as pd
 import numpy as np
@@ -226,4 +228,105 @@ class PerformanceTracker:
         }
         
         return summary
+    
+    def save_state(self, filepath: Path) -> None:
+        """Save performance tracker state to disk.
+        
+        Args:
+            filepath: Path to save state file
+        """
+        try:
+            # Convert deques to lists and datetime objects to ISO format
+            equity_list = []
+            for entry in self.equity_history:
+                equity_entry = entry.copy()
+                if 'timestamp' in equity_entry and isinstance(equity_entry['timestamp'], datetime):
+                    equity_entry['timestamp'] = equity_entry['timestamp'].isoformat()
+                equity_list.append(equity_entry)
+            
+            trades_list = []
+            for trade in self.trades:
+                trade_entry = trade.copy()
+                if 'timestamp' in trade_entry and isinstance(trade_entry['timestamp'], datetime):
+                    trade_entry['timestamp'] = trade_entry['timestamp'].isoformat()
+                trades_list.append(trade_entry)
+            
+            state = {
+                'initial_capital': self.initial_capital,
+                'equity_history': equity_list,
+                'trades': trades_list,
+                'metrics': self.metrics,
+                'returns': list(self.returns),
+                'peak_equity': self.peak_equity,
+                'saved_at': datetime.utcnow().isoformat(),
+            }
+            
+            # Ensure directory exists
+            filepath.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(filepath, 'w') as f:
+                json.dump(state, f, indent=2)
+            
+            print(f"[PerformanceTracker] State saved to {filepath}")
+        
+        except Exception as e:
+            print(f"[PerformanceTracker] Error saving state: {e}")
+    
+    def load_state(self, filepath: Path) -> bool:
+        """Load performance tracker state from disk.
+        
+        Args:
+            filepath: Path to load state from
+            
+        Returns:
+            True if loaded successfully, False otherwise
+        """
+        try:
+            if not filepath.exists():
+                print(f"[PerformanceTracker] No saved state found at {filepath}")
+                return False
+            
+            with open(filepath, 'r') as f:
+                state = json.load(f)
+            
+            # Restore state
+            self.initial_capital = state.get('initial_capital', self.initial_capital)
+            
+            # Restore equity history
+            self.equity_history.clear()
+            for entry in state.get('equity_history', []):
+                equity_entry = entry.copy()
+                if 'timestamp' in equity_entry and isinstance(equity_entry['timestamp'], str):
+                    equity_entry['timestamp'] = datetime.fromisoformat(equity_entry['timestamp'])
+                self.equity_history.append(equity_entry)
+            
+            # Restore trades
+            self.trades.clear()
+            for trade in state.get('trades', []):
+                trade_entry = trade.copy()
+                if 'timestamp' in trade_entry and isinstance(trade_entry['timestamp'], str):
+                    trade_entry['timestamp'] = datetime.fromisoformat(trade_entry['timestamp'])
+                self.trades.append(trade_entry)
+            
+            # Restore metrics
+            self.metrics = state.get('metrics', self.metrics)
+            
+            # Restore returns
+            self.returns.clear()
+            for ret in state.get('returns', []):
+                self.returns.append(ret)
+            
+            # Restore peak equity
+            self.peak_equity = state.get('peak_equity', self.initial_capital)
+            
+            print(f"[PerformanceTracker] State loaded from {filepath}")
+            print(f"[PerformanceTracker]   Equity points: {len(self.equity_history)}, Trades: {len(self.trades)}")
+            
+            return True
+        
+        except Exception as e:
+            print(f"[PerformanceTracker] Error loading state: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
 

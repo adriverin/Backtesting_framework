@@ -56,8 +56,10 @@ class TradingEngine:
         # Runtime state
         self.running = False
         self.last_signal_update: float = 0
+        self.last_state_save: float = 0
         # Update signals interval (configurable)
         self.signal_update_interval: int = int(config.get('runtime.signal_update_interval_sec', 60))
+        self.state_save_interval: int = 300  # Save state every 5 minutes
         
         # Binance client (for order execution)
         self.exchange = None
@@ -69,6 +71,7 @@ class TradingEngine:
         log_dir = Path(self.config.get('logging.dir', 'logs'))
         log_dir.mkdir(parents=True, exist_ok=True)
         self.state_path = log_dir / f"state_{self.config['symbol']}_{self.config['timeframe']}.json"
+        self.perf_state_path = log_dir / f"performance_{self.config['symbol']}_{self.config['timeframe']}.json"
         self.prev_signal: float = 0.0
     
     async def initialize(self) -> None:
@@ -114,6 +117,8 @@ class TradingEngine:
             self._reset_state()
         else:
             self._load_state()
+            # Load performance tracker state (separate file)
+            self.performance_tracker.load_state(self.perf_state_path)
         
         print("[TradingEngine] Initialization complete!")
     
@@ -218,6 +223,12 @@ class TradingEngine:
                 
                 # Update performance metrics
                 await self._update_performance()
+                
+                # Periodic state save (to persist equity curve and metrics)
+                if current_time - self.last_state_save >= self.state_save_interval:
+                    if self.performance_tracker:
+                        self.performance_tracker.save_state(self.perf_state_path)
+                    self.last_state_save = current_time
                 
                 # Sleep briefly
                 await asyncio.sleep(1)
@@ -629,6 +640,10 @@ class TradingEngine:
             }
             with open(self.state_path, 'w') as f:
                 json.dump(st, f)
+            
+            # Save performance tracker state
+            if self.performance_tracker:
+                self.performance_tracker.save_state(self.perf_state_path)
         except Exception:
             pass
 
@@ -636,6 +651,8 @@ class TradingEngine:
         try:
             if self.state_path.exists():
                 self.state_path.unlink(missing_ok=True)  # type: ignore[arg-type]
+            if self.perf_state_path.exists():
+                self.perf_state_path.unlink(missing_ok=True)  # type: ignore[arg-type]
         except Exception:
             pass
         self.current_position = 0.0
