@@ -57,6 +57,7 @@ class TradingEngine:
         self.running = False
         self.last_signal_update: float = 0
         self.last_state_save: float = 0
+        self.last_position_open: float = 0  # Track when we last opened a position
         # Update signals interval (configurable)
         self.signal_update_interval: int = int(config.get('runtime.signal_update_interval_sec', 60))
         self.state_save_interval: int = 300  # Save state every 5 minutes
@@ -310,16 +311,15 @@ class TradingEngine:
             return
         
         # Position doesn't match signal - need to adjust
-        # Use time-based duplicate prevention instead of signal comparison
         current_time = time.time()
-        min_time_between_opens = 10  # seconds - prevent rapid re-opens
+        min_time_between_opens = 5  # seconds - prevent rapid duplicate opens
         
         if self.current_position == 0 and self.current_signal != 0:
             # Need to open position
-            # Check if we just recently opened (within last 10 seconds)
-            time_since_last_update = current_time - self.last_signal_update
-            if time_since_last_update < min_time_between_opens and self.prev_signal == self.current_signal:
-                # Just updated signals, wait to avoid duplicate
+            # Prevent rapid duplicate opens (e.g., if signal just confirmed)
+            time_since_last_open = current_time - self.last_position_open
+            if time_since_last_open < min_time_between_opens:
+                # Just opened recently, wait to avoid duplicate
                 return
             
             # Open new position
@@ -390,6 +390,7 @@ class TradingEngine:
             self.current_position = direction
             self.entry_price = executed_price
             self.position_size = executed_qty
+            self.last_position_open = time.time()  # Track when we opened
             
             # Record trade
             self.performance_tracker.record_trade(
