@@ -39,6 +39,9 @@ class LiveTradingSystem:
         self.stopping = False  # Flag to prevent multiple shutdown attempts
         self.restart_count = 0
         self.max_restart_attempts = self.config.get('runtime.max_restart_attempts', 10)
+        
+        # Task management
+        self.main_tasks = []
     
     async def initialize(self) -> None:
         """Initialize all system components."""
@@ -96,15 +99,18 @@ class LiveTradingSystem:
         self.running = True
         
         try:
-            # Start all components
-            tasks = [
-                self.trading_engine.start(),
-                self.reoptimizer.start(),
-                self.dashboard_server.run(),
+            # Create tasks for all components
+            self.main_tasks = [
+                asyncio.create_task(self.trading_engine.start()),
+                asyncio.create_task(self.reoptimizer.start()),
+                asyncio.create_task(self.dashboard_server.run()),
             ]
             
             # Run all tasks concurrently
-            await asyncio.gather(*tasks)
+            await asyncio.gather(*self.main_tasks, return_exceptions=True)
+        
+        except asyncio.CancelledError:
+            print("📌 Main tasks cancelled")
         
         except Exception as e:
             print(f"❌ Error in live trading system: {e}")
@@ -176,6 +182,23 @@ class LiveTradingSystem:
         print("🛑 SHUTTING DOWN LIVE TRADING SYSTEM")
         print("=" * 80)
         
+        # Cancel all main tasks
+        for task in self.main_tasks:
+            if not task.done():
+                task.cancel()
+        
+        # Wait for tasks to finish cancelling (with timeout)
+        if self.main_tasks:
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*self.main_tasks, return_exceptions=True),
+                    timeout=5.0
+                )
+            except asyncio.TimeoutError:
+                print("⚠️  Some tasks didn't complete within timeout")
+            except Exception:
+                pass  # Ignore exceptions during cancellation
+        
         # Stop all components
         await self._stop_components()
         
@@ -239,8 +262,8 @@ async def main():
         if not shutdown_event.is_set():
             print("\n⚠️  Shutdown signal received...")
             shutdown_event.set()
-            # Stop the running tasks by setting the running flag
-            system.running = False
+            # Create task to stop the system
+            asyncio.create_task(system.stop())
     
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, signal_handler)
@@ -254,10 +277,17 @@ async def main():
         print("\n⚠️  Keyboard interrupt received...")
         shutdown_event.set()
     
+    except asyncio.CancelledError:
+        print("📌 Main coroutine cancelled")
+    
     finally:
-        # Only call stop once
-        if not system.stopping:
-            await system.stop()
+        # Ensure stop is called
+        await system.stop()
+        print("✅ Exiting...")
+        
+        # Force exit to prevent hanging
+        import sys
+        sys.exit(0)
 
 
 if __name__ == "__main__":
