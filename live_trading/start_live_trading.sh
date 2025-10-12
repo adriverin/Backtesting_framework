@@ -12,6 +12,37 @@ BLUE='\033[0;34m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
+# Cleanup function (must be defined before trap)
+cleanup() {
+    # Disable exit-on-error during cleanup
+    set +e
+    
+    echo ""
+    echo -e "${RED}⏹${NC} Shutting down..."
+    
+    # Stop price feeder if we started it
+    if [ -f /tmp/price_feeder.pid ]; then
+        PID=$(cat /tmp/price_feeder.pid)
+        if ps -p $PID > /dev/null 2>&1; then
+            echo -e "${BLUE}⏹${NC} Stopping price feeder (PID: ${PID})..."
+            kill $PID 2>/dev/null || true
+            # Wait briefly for graceful shutdown
+            sleep 1
+            # Force kill if still running
+            if ps -p $PID > /dev/null 2>&1; then
+                kill -9 $PID 2>/dev/null || true
+            fi
+        fi
+        rm -f /tmp/price_feeder.pid
+    fi
+    
+    echo -e "${GREEN}✓${NC} Shutdown complete"
+    exit 0
+}
+
+# Set trap BEFORE any long-running commands
+trap cleanup EXIT INT TERM
+
 echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║  Live Trading System - Startup Script  ║${NC}"
 echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
@@ -107,26 +138,8 @@ if [ -f .env ]; then
     export $(cat .env | grep -v '^#' | xargs)
 fi
 
-# Start the trading system
+# Start the trading system (runs in foreground, blocks until Ctrl+C or exit)
 python run_live.py
 
-# Cleanup on exit
-cleanup() {
-    echo ""
-    echo -e "${RED}⏹${NC} Shutting down..."
-    
-    # Stop price feeder if we started it
-    if [ -f /tmp/price_feeder.pid ]; then
-        PID=$(cat /tmp/price_feeder.pid)
-        if ps -p $PID > /dev/null 2>&1; then
-            echo -e "${BLUE}⏹${NC} Stopping price feeder (PID: ${PID})..."
-            kill $PID
-            rm /tmp/price_feeder.pid
-        fi
-    fi
-    
-    echo -e "${GREEN}✓${NC} Shutdown complete"
-}
-
-trap cleanup EXIT INT TERM
+# Script exits here, triggering the EXIT trap which runs cleanup()
 
