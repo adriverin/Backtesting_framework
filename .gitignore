@@ -38,3 +38,4 @@ live_trading/TRADING_ISSUES_DIAGNOSIS.md
 live_trading/FIXES_APPLIED.md
 live_trading/CTRL_C_FIX.md
 live_trading/DOUBLE_SHUTDOWN_FIX.md
+live_trading/JSON_SERIALIZATION_FIX.md

@@ -108,6 +108,8 @@ class DashboardServer:
         @self.app.get("/api/trades")
         async def get_trades():
             """Get trade history."""
+            import math
+            
             trades_df = self.trading_engine.performance_tracker.get_trades_df()
             
             if trades_df.empty:
@@ -116,10 +118,19 @@ class DashboardServer:
             # Convert to list of dicts
             trades_list = trades_df.to_dict('records')
             
-            # Convert timestamps to ISO format
+            # Sanitize and convert timestamps
             for trade in trades_list:
+                # Convert timestamps to ISO format
                 if 'timestamp' in trade and isinstance(trade['timestamp'], datetime):
                     trade['timestamp'] = trade['timestamp'].isoformat()
+                
+                # Sanitize float values (replace nan/inf with safe values)
+                for key, value in trade.items():
+                    if isinstance(value, float):
+                        if math.isnan(value):
+                            trade[key] = None  # Use None for missing values
+                        elif math.isinf(value):
+                            trade[key] = 999999.0 if value > 0 else -999999.0
             
             return {'trades': trades_list}
         

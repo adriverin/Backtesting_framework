@@ -189,8 +189,23 @@ class PerformanceTracker:
                 self.metrics['max_drawdown_pct'] = current_dd_pct
     
     def get_metrics(self) -> Dict[str, float]:
-        """Get current performance metrics."""
-        return self.metrics.copy()
+        """Get current performance metrics (sanitized for JSON)."""
+        import math
+        
+        # Sanitize metrics: replace inf/nan with safe values
+        sanitized = {}
+        for key, value in self.metrics.items():
+            if isinstance(value, float):
+                if math.isinf(value):
+                    sanitized[key] = 999999.0 if value > 0 else -999999.0
+                elif math.isnan(value):
+                    sanitized[key] = 0.0
+                else:
+                    sanitized[key] = value
+            else:
+                sanitized[key] = value
+        
+        return sanitized
     
     def get_equity_curve(self) -> pd.DataFrame:
         """Get equity curve as DataFrame."""
