@@ -6,10 +6,6 @@
 
 set -e
 
-# Make sure scripts are not running 
-pkill -f live_feeder_ccxt
-pkill -f run_live.py
-
 # Colors for output
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
