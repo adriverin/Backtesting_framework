@@ -268,14 +268,12 @@ class TradingEngine:
             current_time = time.time()
             if not hasattr(self, '_last_data_debug') or (current_time - self._last_data_debug > 600):
                 self._last_data_debug = current_time
-                # Count historical orderbook data
+                # Show lookback configuration
                 if self.config['strategy']['name'] == 'orderbook_depth':
-                    base_dir = self.config.get('data.orderbook_depth_dir', 'data/orderbook_depth')
-                    symbol_dir = Path(base_dir) / self.config['symbol']
-                    csv_files = list(symbol_dir.glob('*.csv'))
-                    print(f"[TradingEngine] 📊 Strategy using {len(csv_files)} days of historical orderbook data")
-                    print(f"[TradingEngine] 📊 Adding ~17,280 new datapoints per day (5s intervals)")
-                    print(f"[TradingEngine] 📊 With 210 days = ~3.6M datapoints, new data has <0.0005% impact per update")
+                    lookback_mean = getattr(self.strategy, 'lookback_mean_fixed', 'unknown')
+                    lookback_current = getattr(self.strategy, 'lookback_current_fixed', 'unknown')
+                    print(f"[TradingEngine] 📊 Orderbook lookback: mean={lookback_mean}, current={lookback_current}")
+                    print(f"[TradingEngine] 📊 Time-based rolling windows adapt to data density automatically")
             
             # Get latest signal
             latest_signal = float(signals.iloc[-1])
@@ -332,34 +330,51 @@ class TradingEngine:
     def _compute_orderbook_z_score(self) -> float | None:
         """Compute current z-score from the orderbook data (same as strategy sees)."""
         try:
-            # Load orderbook data the same way strategy does
+            # Use the strategy's own method to load data consistently
             from pathlib import Path
             import pandas as pd
+            from datetime import datetime, timezone, timedelta
             
             base_dir = self.config.get('data.orderbook_depth_dir', 'data/orderbook_depth')
             symbol = self.config['symbol']
             symbol_dir = Path(base_dir) / symbol
             
-            # Get today's file
-            from datetime import datetime, timezone
-            today = datetime.now(timezone.utc).date()
-            filename = f"{symbol}-bookDepth-{today.year}-{today.month:02d}-{today.day:02d}.csv"
-            filepath = symbol_dir / filename
-            
-            if not filepath.exists():
-                return None
-            
-            # Read today's data
-            df = pd.read_csv(filepath)
-            df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
-            
-            # Get strategy parameters
-            percentage = getattr(self.strategy, 'percentage', 2)
+            # Get lookback parameters
             lookback_mean = getattr(self.strategy, 'lookback_mean_fixed', None)
             lookback_current = getattr(self.strategy, 'lookback_current_fixed', None)
+            percentage = getattr(self.strategy, 'percentage', 2)
             
             if not lookback_mean or not lookback_current:
                 return None
+            
+            # Parse lookback to determine how many days to load
+            if isinstance(lookback_mean, str) and lookback_mean.endswith('D'):
+                days_to_load = int(lookback_mean[:-1]) + 1  # +1 for safety
+            else:
+                days_to_load = 2  # Default
+            
+            # Load last N days of CSV files
+            all_data = []
+            today = datetime.now(timezone.utc).date()
+            
+            for i in range(days_to_load):
+                date = today - timedelta(days=i)
+                filename = f"{symbol}-bookDepth-{date.year}-{date.month:02d}-{date.day:02d}.csv"
+                filepath = symbol_dir / filename
+                
+                if filepath.exists():
+                    try:
+                        day_df = pd.read_csv(filepath)
+                        day_df['timestamp'] = pd.to_datetime(day_df['timestamp'], utc=True)
+                        all_data.append(day_df)
+                    except Exception:
+                        continue
+            
+            if not all_data:
+                return None
+            
+            # Combine all data
+            df = pd.concat(all_data, ignore_index=True).sort_values('timestamp')
             
             # Calculate z-score (same logic as strategy)
             eps = 1e-9
@@ -372,7 +387,7 @@ class TradingEngine:
             bid = pivoted[-percentage]
             aligned = pd.concat({"ask": ask, "bid": bid}, axis=1).dropna()
             
-            if aligned.empty:
+            if aligned.empty or len(aligned) < 100:  # Need minimum data
                 return None
             
             ratio = aligned["bid"] / (aligned["ask"] + aligned["bid"] + eps)
@@ -384,8 +399,10 @@ class TradingEngine:
             
             z_score = -(r_current - r_ma) / (r_std + eps)
             
-            if not z_score.empty:
-                return float(z_score.iloc[-1])
+            # Get last valid value
+            z_valid = z_score.dropna()
+            if not z_valid.empty:
+                return float(z_valid.iloc[-1])
             
             return None
             
@@ -393,6 +410,8 @@ class TradingEngine:
             # Don't spam logs with errors
             if not hasattr(self, '_z_score_error_logged'):
                 print(f"[TradingEngine] Could not compute z-score: {e}")
+                import traceback
+                traceback.print_exc()
                 self._z_score_error_logged = True
             return None
     
