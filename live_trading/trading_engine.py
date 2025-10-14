@@ -281,22 +281,120 @@ class TradingEngine:
             latest_signal = float(signals.iloc[-1])
             prev_signal = self.prev_signal
             
+            # Compute z-score for debugging (orderbook depth strategy only)
+            z_score_current = None
+            if self.config['strategy']['name'] == 'orderbook_depth':
+                z_score_current = self._compute_orderbook_z_score()
+            
             # Debug info
             z_threshold = getattr(self.strategy, 'z_threshold', None)
             exit_band = getattr(self.strategy, 'exit_band', None)
             
             self.current_signal = latest_signal
             
-            # Show signal change details
+            # Show signal change details with z-score
+            z_str = f"{z_score_current:+.4f}" if z_score_current is not None else "N/A"
             if latest_signal != prev_signal:
-                print(f"[TradingEngine] ⚡ SIGNAL CHANGE: {prev_signal} → {latest_signal} | Position: {self.current_position} | threshold: {z_threshold} | exit_band: {exit_band}")
+                print(f"[TradingEngine] ⚡ SIGNAL CHANGE: {prev_signal} → {latest_signal} | Position: {self.current_position}")
+                print(f"               z-score: {z_str} | entry: ±{z_threshold} | exit: {exit_band}")
             else:
-                print(f"[TradingEngine] Signal: {latest_signal} | Position: {self.current_position} | (unchanged)")
+                # Show detailed z-score info to diagnose why signal isn't changing
+                if z_score_current is not None:
+                    # Determine trading zone
+                    if z_score_current > z_threshold:
+                        zone = "LONG ENTRY"
+                    elif z_score_current < -z_threshold:
+                        zone = "SHORT ENTRY"
+                    elif exit_band is not None and exit_band <= 0:
+                        band = abs(exit_band)
+                        if self.current_position > 0 and z_score_current > -band:
+                            zone = "LONG HOLD"
+                        elif self.current_position < 0 and z_score_current < band:
+                            zone = "SHORT HOLD"
+                        elif self.current_position > 0 and z_score_current <= -band:
+                            zone = "LONG EXIT"
+                        elif self.current_position < 0 and z_score_current >= band:
+                            zone = "SHORT EXIT"
+                        else:
+                            zone = "FLAT ZONE"
+                    else:
+                        zone = "NEUTRAL"
+                    
+                    print(f"[TradingEngine] Signal: {latest_signal} | Pos: {self.current_position} | z: {z_str} [{zone}]")
+                else:
+                    print(f"[TradingEngine] Signal: {latest_signal} | Position: {self.current_position}")
         
         except Exception as e:
             print(f"[TradingEngine] Error updating signals: {e}")
             import traceback
             traceback.print_exc()
+    
+    def _compute_orderbook_z_score(self) -> float | None:
+        """Compute current z-score from the orderbook data (same as strategy sees)."""
+        try:
+            # Load orderbook data the same way strategy does
+            from pathlib import Path
+            import pandas as pd
+            
+            base_dir = self.config.get('data.orderbook_depth_dir', 'data/orderbook_depth')
+            symbol = self.config['symbol']
+            symbol_dir = Path(base_dir) / symbol
+            
+            # Get today's file
+            from datetime import datetime, timezone
+            today = datetime.now(timezone.utc).date()
+            filename = f"{symbol}-bookDepth-{today.year}-{today.month:02d}-{today.day:02d}.csv"
+            filepath = symbol_dir / filename
+            
+            if not filepath.exists():
+                return None
+            
+            # Read today's data
+            df = pd.read_csv(filepath)
+            df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
+            
+            # Get strategy parameters
+            percentage = getattr(self.strategy, 'percentage', 2)
+            lookback_mean = getattr(self.strategy, 'lookback_mean_fixed', None)
+            lookback_current = getattr(self.strategy, 'lookback_current_fixed', None)
+            
+            if not lookback_mean or not lookback_current:
+                return None
+            
+            # Calculate z-score (same logic as strategy)
+            eps = 1e-9
+            pivoted = df.pivot(index="timestamp", columns="percentage", values="notional").sort_index()
+            
+            if percentage not in pivoted.columns or -percentage not in pivoted.columns:
+                return None
+            
+            ask = pivoted[percentage]
+            bid = pivoted[-percentage]
+            aligned = pd.concat({"ask": ask, "bid": bid}, axis=1).dropna()
+            
+            if aligned.empty:
+                return None
+            
+            ratio = aligned["bid"] / (aligned["ask"] + aligned["bid"] + eps)
+            
+            # Rolling windows (time-based)
+            r_ma = ratio.rolling(lookback_mean).mean()
+            r_std = ratio.rolling(lookback_mean).std()
+            r_current = ratio.rolling(lookback_current).mean()
+            
+            z_score = -(r_current - r_ma) / (r_std + eps)
+            
+            if not z_score.empty:
+                return float(z_score.iloc[-1])
+            
+            return None
+            
+        except Exception as e:
+            # Don't spam logs with errors
+            if not hasattr(self, '_z_score_error_logged'):
+                print(f"[TradingEngine] Could not compute z-score: {e}")
+                self._z_score_error_logged = True
+            return None
     
     async def _save_orderbook_snapshot(self, orderbook_df: pd.DataFrame) -> None:
         """Save orderbook snapshot for strategy to read."""

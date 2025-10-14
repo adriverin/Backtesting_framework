@@ -30,6 +30,9 @@ reports/example_run/ins_mc.json
 
 strategies_to_check.md
 
+debug_signal_alignment.py
+debug_price_issue.py
+
 
 live_trading/DEBUG_INFO.md
 
@@ -42,3 +45,4 @@ live_trading/JSON_SERIALIZATION_FIX.md
 live_trading/POSITION_SIGNAL_MISMATCH_FIX.md
 live_trading/SIGNAL_DIAGNOSIS.md
 live_trading/WHY_SIGNAL_DOESNT_CHANGE.md
+live_trading/Z_SCORE_DEBUG.md
